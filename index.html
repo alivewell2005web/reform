@@ -316,8 +316,8 @@ function openColFilter(key,anchorEl){
 function renderHead(){
   const extraTh=[["⑦","入居前清掃","movein"],["⑧","鍵交換","key"]].map(([num,n,fk])=>`<th style="padding:8px 4px; text-align:center; min-width:84px; font-weight:400; font-size:13px; border-left:0.5px solid var(--border);">${num}${filterIcon(fk)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${n}</div></th>`).join("");
   document.getElementById("thead").innerHTML=`<tr style="background:var(--surface-1); color:var(--text-secondary);">
-    <th style="padding:9px 6px; text-align:center; position:sticky; left:0; background:var(--surface-1); min-width:56px; border-right:0.5px solid var(--border); font-size:13px;">区分${filterIcon("category")}</th>
-    <th style="padding:9px 10px; text-align:left; min-width:186px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
+    <th style="padding:9px 10px; text-align:left; position:sticky; left:0; z-index:2; background:var(--surface-1); min-width:170px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
+    <th style="padding:9px 6px; text-align:center; min-width:56px; border-right:0.5px solid var(--border); font-size:13px;">区分${filterIcon("category")}</th>
     <th style="padding:9px 6px; text-align:left; min-width:92px; border-right:0.5px solid var(--border); font-size:13px;">現在地${filterIcon("status")}</th>
     ${PHASES.map((p,idx)=>{const nm=p.slice(1).replace("・工程管理","<br>・工程管理").replace("・請求書発行","<br>・請求書発行"); return `<th style="padding:8px 4px; text-align:center; min-width:72px; font-weight:400; font-size:13px;">${p.slice(0,1)}${filterIcon("phase"+idx)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${nm}</div></th>`;}).join("")}
     ${extraTh}<th style="padding:9px 10px; text-align:left; min-width:140px; border-left:0.5px solid var(--border); font-size:13px;">メモ</th></tr>`;
@@ -442,17 +442,19 @@ function renderBody(){
     const missBadge = missing ? `<span title="業者未設定の工事があります" style="font-size:10px; padding:1px 7px; border-radius:var(--radius); background:var(--bg-warning); color:var(--text-warning); margin-left:6px;"><i class="ti ti-user-exclamation" aria-hidden="true" style="font-size:11px; vertical-align:-1px;"></i> 業者未設定</span>` : "";
     const catColor = s.category==="自社" ? {bg:"#e0e7ff",fg:"#3730a3"} : {bg:"#fef3c7",fg:"#92400e"};
     return `<tr style="border-top:0.5px solid var(--border); ${s.open?'background:var(--bg-accent-muted);':''}">
-      <td style="padding:8px 6px; text-align:center; position:sticky; left:0; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
-        <span style="display:inline-block; font-size:11px; font-weight:600; padding:2px 7px; border-radius:var(--radius); background:${catColor.bg}; color:${catColor.fg};">${s.category}</span></td>
-      <td style="padding:8px 10px; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
+      <td style="padding:8px 10px; position:sticky; left:0; z-index:1; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
         <div style="display:flex; align-items:flex-start; gap:6px;">
           <div data-toggle="${s.id}" style="cursor:pointer; flex:1;">
             <div style="font-weight:500;"><i class="ti ti-chevron-${s.open?'down':'right'}" aria-hidden="true" style="font-size:13px; vertical-align:-1px;"></i> ${s.name}</div>
             <div style="font-size:11px; color:var(--text-secondary); padding-left:16px;">${s.room}号室${wn?` · ④内訳${wn}件`:""}${missBadge}</div>
           </div>
-          <button data-siteedit="${s.id}" title="現場名・区分を編集" style="flex:none; font-size:11px; padding:2px 7px; color:var(--text-secondary); border-color:var(--border);"><i class="ti ti-pencil" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
-          <button data-sitedel="${s.id}" title="この現場を削除" style="flex:none; font-size:11px; padding:2px 7px; color:var(--text-danger); border-color:var(--border);"><i class="ti ti-trash" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
+          <div style="display:flex; flex-direction:column; gap:3px; flex:none;">
+          <button data-siteedit="${s.id}" title="現場名・区分を編集" style="font-size:11px; padding:2px 7px; color:var(--text-secondary); border-color:var(--border);"><i class="ti ti-pencil" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
+          <button data-sitedel="${s.id}" title="この現場を削除" style="font-size:11px; padding:2px 7px; color:var(--text-danger); border-color:var(--border);"><i class="ti ti-trash" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
+          </div>
         </div></td>
+      <td style="padding:8px 6px; text-align:center; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
+        <span style="display:inline-block; font-size:11px; font-weight:600; padding:2px 7px; border-radius:var(--radius); background:${catColor.bg}; color:${catColor.fg};">${s.category}</span></td>
       <td style="padding:8px 8px; border-right:0.5px solid var(--border);">${status}</td>
       ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}<td style="padding:5px 6px; border-left:0.5px solid var(--border); vertical-align:top;"><textarea data-memo="${s.id}" rows="2" placeholder="メモ" style="width:130px; box-sizing:border-box; font-size:12px; padding:3px 5px; resize:vertical; min-height:32px;">${(s.memo||"").replace(/</g,"&lt;")}</textarea></td></tr>`;
   }).join("");
@@ -1378,16 +1380,22 @@ function refresh(){ pickedSite=null; pickedWork=null; spanStart=null; dirty=true
 function pdfSpansForVendor(vendor){
   let e=[];
   sites.forEach(s=>{ Object.keys(s.works).forEach(w=>{ if(WORKDEF[w].type!=="span")return; const wk=s.works[w];
-    if(wk.start&&wk.end&&wk.vendor===vendor) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act}); }); });
+    if(wk.start&&wk.end&&wk.vendor===vendor) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act,color:wk.calColor||null}); }); });
   return e;
 }
 function pdfSinglesOnDay(key,vendor){
   let out=[];
   sites.forEach(s=>{ Object.keys(s.works).forEach(w=>{ const t=WORKDEF[w].type, wk=s.works[w];
-    if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.plan===key&&it.vendor===vendor) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act}); }); }
-    else if(t==="single"){ if(wk.plan===key&&wk.vendor===vendor) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act}); }
+    if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.plan===key&&it.vendor===vendor) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act,color:it.calColor||null}); }); }
+    else if(t==="single"){ if(wk.plan===key&&wk.vendor===vendor) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act,color:wk.calColor||null}); }
   }); });
   return out;
+}
+// PDF用の色解決：カレンダーの色変更(calColor)と、ZERO業者のクリーニング請求先色を反映
+function pdfColor(vendor,work,site,customColor){
+  if(customColor) return customColor;
+  if(vendor==="ZERO" && work==="クリーニング"){ return ZERO_BILL_COLOR[site.billTo]||WORKCOLOR["クリーニング"]; }
+  return WORKCOLOR[work];
 }
 // 一覧用：期間内に掛かる、その業者の全工事（span/single/multi明細）を集める
 function pdfListForVendor(vendor,days){
@@ -1448,6 +1456,7 @@ function buildPdf(){
   if(usedWorks.length){
     html+=`<div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px; font-size:11px;">`+
       usedWorks.map(w=>{const c=WORKCOLOR[w]; return `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:11px; height:11px; border-radius:2px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("")+
+      (vendor==="ZERO"&&usedWorks.includes("クリーニング") ? `<span style="color:#666;">｜清掃色＝請求先：</span>`+Object.keys(ZERO_BILL_COLOR).map(b=>{const c=ZERO_BILL_COLOR[b]; return `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:11px; height:11px; border-radius:2px; background:${c.done}; border:1px solid ${c.fg};"></span>${b}</span>`;}).join("") : "")+
       `<span style="color:#666;">（濃い色＝完了済み）</span></div>`;
   }
 
@@ -1468,7 +1477,7 @@ function buildPdf(){
       const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey);
       const hol=holidayName(k);
       const singles=pdfSinglesOnDay(k,vendor);
-      const chips=singles.map(e=>`<div style="background:${e.done?WORKCOLOR[e.work].done:WORKCOLOR[e.work].bg}; border:1px solid ${WORKCOLOR[e.work].fg}; color:${WORKCOLOR[e.work].fg}; font-size:9px; line-height:1.25; padding:1px 4px; margin-top:2px; border-radius:4px; word-break:break-word;">${escapeHtml(pdfLabel(e))}</div>`).join("");
+      const chips=singles.map(e=>{const c=pdfColor(vendor,e.work,e.site,e.color); return `<div style="background:${e.done?c.done:c.bg}; border:1px solid ${c.fg}; color:${c.fg}; font-size:9px; line-height:1.25; padding:1px 4px; margin-top:2px; border-radius:4px; word-break:break-word;">${escapeHtml(pdfLabel(e))}</div>`;}).join("");
       const dnumColor = dow===0?'#c0392b':(hol?'#c0392b':dow===6?'#2563eb':'#555');
       const cellBg = isToday?'#eef3fd':(hol?'#f8d7d7':'#fff');
       const holLabel = hol?`<div style="font-size:8px; color:#c0392b; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
@@ -1485,7 +1494,7 @@ function buildPdf(){
       if(fc<0) return;
       const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+e.slot*(ROW2+GAP2);
       const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
-      const c=WORKCOLOR[e.work], bg=e.done?c.done:c.bg, fg=c.fg;
+      const c=pdfColor(vendor,e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
       const radius=`${startsHere?'5px':'2px'} ${endsHere?'5px':'2px'} ${endsHere?'5px':'2px'} ${startsHere?'5px':'2px'}`;
       overlay+=`<div style="position:absolute; left:calc(${left}% + 3px); width:calc(${width}% - 6px); top:${top}px; height:${ROW2}px; line-height:${ROW2}px; font-size:9px; padding:0 4px; border-radius:${radius}; background:${bg}; border:1px solid ${fg}; color:${fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600;">${escapeHtml(pdfLabel(e))}</div>`;
     });
