@@ -843,7 +843,12 @@ function renderCalendar(){
 
   let spans=collectSpans();
   spans.sort((a,b)=>a.start.localeCompare(b.start));
-  const slotEnds=[]; spans.forEach(e=>{let sl=0; while(sl<slotEnds.length&&slotEnds[sl]>=e.start)sl++; e.slot=sl; slotEnds[sl]=e.end;});
+
+  // ===== レーンモード（テスト）：現場/業者で絞り込み時のみ、物件ごとに高さを揃える =====
+  const laneMode = (calSite!=="all" || vendorFiltered());
+  // 全件表示は「詰めモード」：現場レーンを作らず、各日その日の予定を上から順に詰める（帯エリア廃止）
+  renderCalendarLanes(spans, days, laneMode);
+  return;
 
   const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
   const tKey=todayKey();
@@ -904,7 +909,116 @@ function renderCalendar(){
 
   const grid=document.getElementById("calgrid");
   grid.innerHTML=headRow+weeksHtml;
+  wireCalendar(grid);
+}
 
+// ===== レーンモード描画 =====
+// groupBySite=true : 現場ごとに固定レーンで高さを揃える（絞り込み時）
+// groupBySite=false: 現場でまとめず、各日その日の予定を上から詰める（全件表示。帯エリア廃止）
+function renderCalendarLanes(spans, days, groupBySite){
+  const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
+  const tKey=todayKey();
+  let weeks=[];
+  if(calView==="week") weeks=[days];
+  else { const firstDow=days[0].getDay(); let row=new Array(firstDow).fill(null); days.forEach(dt=>{row.push(dt); if(row.length===7){weeks.push(row); row=[];}}); if(row.length){while(row.length<7)row.push(null); weeks.push(row);} }
+
+  const wd=["日","月","火","水","木","金","土"];
+  let headRow;
+  if(calView==="week"){
+    headRow=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px;">`+days.map(dt=>`<div style="text-align:center; font-size:11px; color:${dt.getDay()===0?'var(--text-danger)':dt.getDay()===6?'var(--text-accent)':'var(--text-secondary)'};">${wd[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}</div>`).join("")+`</div>`;
+  } else {
+    headRow=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px;">`+wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
+  }
+
+  const colW=100/7, topPad=26;
+  let weeksHtml="";
+  weeks.forEach(week=>{
+    const weekKeys=week.map(dt=>dt?keyOf(dt):null);
+    // グルーピングキー：現場別 or 全件（"_all"に集約）
+    const gid=(id)=> groupBySite ? id : "_all";
+    const siteOrder=[]; const seen=new Set();
+    const spanBySite={};        // gid -> spans[]
+    const singleByCell={};      // "gid__dayIndex" -> [{kind,e,i,k}]
+    const noteFirst=(g)=>{ if(!seen.has(g)){ seen.add(g); siteOrder.push(g); } };
+
+    spans.forEach(e=>{ let fc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){fc=c;break;}} if(fc<0)return; const g=gid(e.site.id); (spanBySite[g]=spanBySite[g]||[]).push(e); noteFirst(g); });
+    for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
+      singlesOnDay(k).forEach((e,i)=>{ const g=gid(e.site.id); noteFirst(g); const kk=g+"__"+c; (singleByCell[kk]=singleByCell[kk]||[]).push({kind:"chip",e,i,k}); });
+      extraChipsOnDay(k).forEach((e,i)=>{ const g=gid(e.site.id); noteFirst(g); const kk=g+"__"+c; (singleByCell[kk]=singleByCell[kk]||[]).push({kind:"xchip",e,i,k}); });
+    }
+
+    // レーン高さ＝その週で「同一グループ・同一日」に載る最大アイテム数（帯も1件として数える）
+    const laneRows={}, laneBase={}; let cursor=0;
+    siteOrder.forEach(g=>{
+      let maxDay=1;
+      for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
+        let n=0;
+        (spanBySite[g]||[]).forEach(e=>{ if(k>=e.start&&k<=e.end) n++; });
+        const arr=singleByCell[g+"__"+c]; if(arr) n+=arr.length;
+        if(n>maxDay) maxDay=n;
+      }
+      laneRows[g]=maxDay; laneBase[g]=cursor; cursor+=maxDay;
+    });
+    const areaH=cursor*(ROW+GAP);
+    const cellMinH=(calView==="week"?120:74);
+
+    // セル本体
+    let cellsHtml=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; position:relative;">`;
+    week.forEach(dt=>{
+      if(!dt){ cellsHtml+=`<div></div>`; return; }
+      const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey), hol=holidayName(k);
+      const isZeroHol = showZeroHolidays() && zeroHolidays.has(k);
+      const dnumColor = isToday?'var(--text-accent)':(hol?'var(--text-danger)':(dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-secondary)'));
+      const cellBg = isToday?'var(--bg-accent-muted)':(hol?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
+      const holLabel = (hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'')
+        +(isZeroHol?`<div title="ZERO休み" style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.1; margin-top:1px;">ZERO休み</div>`:'');
+      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
+        <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getDate()}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
+        <div style="height:${areaH}px;"></div></div>`;
+    });
+    cellsHtml+=`</div>`;
+
+    // オーバーレイ：現場レーンの先頭行(サブ0)から、その日のアイテムを順に積む
+    let overlay=`<div style="position:absolute; inset:0; pointer-events:none;">`;
+    // 各日・各現場のサブ行カウンタ
+    const subUsed={}; // "id__c" -> 次に使うサブ行番号
+    const nextSub=(id,c)=>{ const kk=id+"__"+c; const v=subUsed[kk]||0; subUsed[kk]=v+1; return v; };
+    // 帯（開始日のサブ行を確保し、その行で全期間を描く）
+    siteOrder.forEach(id=>{ (spanBySite[id]||[]).forEach(e=>{
+      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}} if(fc<0)return;
+      const sub=nextSub(id,fc); // 開始日でサブ行を確保。他日も同じ行に描く（掛かる各日でその行を消費）
+      for(let c=fc+1;c<=lc;c++){ if((subUsed[id+"__"+c]||0)<=sub) subUsed[id+"__"+c]=sub+1; }
+      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+(laneBase[id]+sub)*(ROW+GAP);
+      const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
+      const c=effColor(e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
+      const radius=`${startsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${startsHere?'6px':'2px'}`;
+      overlay+=`<div class="span" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500;">${labelText(e)}</div>`;
+    }); });
+    // 単日・追加（帯の下の空きサブ行から順に）
+    for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
+      siteOrder.forEach(id=>{ const arr=singleByCell[id+"__"+c]; if(!arr)return;
+        arr.forEach(item=>{
+          const sub=nextSub(id,c);
+          const top=topPad+(laneBase[id]+sub)*(ROW+GAP), left=c*colW;
+          if(item.kind==="chip"){ const e=item.e; const c2=effColor(e.work,e.site,e.color);
+            overlay+=`<div class="chip" data-chipkey="${k}__${item.i}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:5px; background:${e.done?c2.done:c2.bg}; color:${c2.fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${labelText(e)}</div>`;
+          } else { const e=item.e;
+            overlay+=`<div class="xchip" data-xchipkey="${k}__${item.i}" title="${extraChipLabel(e)}（実施）" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:5px; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${extraChipLabel(e)}</div>`;
+          }
+        });
+      });
+    }
+    overlay+=`</div>`;
+    weeksHtml+=`<div style="position:relative; margin-bottom:4px;">${cellsHtml}${overlay}</div>`;
+  });
+
+  const grid=document.getElementById("calgrid");
+  grid.innerHTML=headRow+weeksHtml;
+  wireCalendar(grid);
+}
+
+// span/chip/xchip のイベント配線＋末尾処理（通常/レーンモードで共通）
+function wireCalendar(grid){
   grid.querySelectorAll(".span").forEach(el=>{
     const [id,w]=el.dataset.spankey.split("__");
     const s=sites.find(x=>x.id===Number(id)); const wk=s.works[w]; const c=effColor(w,s,wk.calColor);
