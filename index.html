@@ -31,6 +31,11 @@ table{background:var(--surface-2);}
 .tabbtn{background:transparent;}
 .viewbtn{background:transparent;}
 #app{max-width:1200px; margin:0 auto;}
+@media (max-width:640px){
+  /* スマホではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
+  #calgrid{ touch-action:pan-y !important; }
+  #calgrid .chip, #calgrid .xchip, #calgrid .span{ touch-action:pan-y !important; cursor:pointer !important; }
+}
 </style>
 </head>
 <body>
@@ -50,13 +55,12 @@ table{background:var(--surface-2);}
   <span id="syncStatus" style="font-size:11px; color:var(--text-muted); margin-left:auto;"></span>
 </div>
 
-<div style="display:flex; gap:4px; margin-bottom:1rem; border-bottom:0.5px solid var(--border);">
-  <button class="tabbtn" data-tab="matrix" style="border:none; border-bottom:2px solid var(--border-accent); border-radius:0; padding:8px 16px; font-weight:500;">工事進捗管理表</button>
-  <button class="tabbtn" data-tab="calendar" style="border:none; border-bottom:2px solid transparent; border-radius:0; padding:8px 16px; color:var(--text-secondary);">工事カレンダー</button>
+<div style="display:flex; gap:8px; margin-bottom:1rem;">
+  <button class="tabbtn" data-tab="matrix" style="flex:1; border:1px solid var(--text-accent); border-radius:10px; padding:12px 16px; font-weight:700; font-size:15px; background:var(--text-accent); color:#fff;">工事進捗管理表</button>
+  <button class="tabbtn" data-tab="calendar" style="flex:1; border:1px solid var(--border-strong); border-radius:10px; padding:12px 16px; font-weight:700; font-size:15px; background:var(--surface-2); color:var(--text-secondary);">工事カレンダー</button>
 </div>
 
 <div id="tab-matrix">
-  <div id="stats" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; margin-bottom:1rem;"></div>
   <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.8rem;">
     <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px;">
     <select id="filter" style="width:auto; min-width:130px;"><option value="incomplete">未完了のみ</option><option value="all">すべて表示</option></select>
@@ -191,7 +195,8 @@ function hasMissingVendor(s){
   return Object.keys(s.works).some(w=>{const wk=s.works[w]; if(WORKDEF[w].type==="multi"){return (wk.items||[]).some(it=>!it.vendor);} return !wk.vendor;});
 }
 
-function renderStats(){
+function renderStats(){ /* 統計サマリーは非表示 */ }
+function renderStats_disabled(){
   const total=sites.length, incomplete=sites.filter(s=>!isComplete(s)).length;
   const est=sites.filter(s=>{const c=currentPhase(s);return c>=1&&c<3;}).length;
   const done=sites.filter(s=>isComplete(s)).length;
@@ -664,7 +669,18 @@ function dayKeyAtPoint(x,y){
 }
 
 let DND=null;
+function isPhone(){ return window.matchMedia && window.matchMedia("(max-width:640px)").matches; }
 function startDrag(el, e, payload){
+  // スマホ幅かつカレンダー内のチップは、ドラッグ無効・タップのみ（スクロール誤爆防止）
+  const inCalendar = el.closest && el.closest("#tab-calendar") && el.closest(".daycell");
+  if(isPhone() && inCalendar){
+    let sx=e.clientX, sy=e.clientY, moved=false;
+    const mv=(ev)=>{ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>8) moved=true; };
+    const up=(ev)=>{ el.removeEventListener("pointermove",mv); el.removeEventListener("pointerup",up); el.removeEventListener("pointercancel",up);
+      if(!moved && payload.onClick) payload.onClick(); };
+    el.addEventListener("pointermove",mv); el.addEventListener("pointerup",up); el.addEventListener("pointercancel",up);
+    return; // preventDefaultしない→ブラウザのスクロールがそのまま効く
+  }
   DND={payload, moved:false, startX:e.clientX, startY:e.clientY, ghost:null, el, pid:e.pointerId};
   try{ if(e.pointerId!=null && el.setPointerCapture) el.setPointerCapture(e.pointerId); }catch(_){}
   const move=(ev)=>{
@@ -814,18 +830,18 @@ function renderCalendar(){
   grid.querySelectorAll(".span").forEach(el=>{
     const [id,w]=el.dataset.spankey.split("__");
     const s=sites.find(x=>x.id===Number(id)); const wk=s.works[w]; const c=WORKCOLOR[w];
-    el.addEventListener("pointerdown",(e)=>{ e.preventDefault(); e.stopPropagation(); startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>openSpanEditor(s,w)}); });
+    el.addEventListener("pointerdown",(e)=>{ if(!isPhone()){ e.preventDefault(); e.stopPropagation(); } startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>openSpanEditor(s,w)}); });
   });
   grid.querySelectorAll(".chip").forEach(el=>{
     const [k,idx]=el.dataset.chipkey.split("__");
     const list=singlesOnDay(k); const e=list[Number(idx)]; if(!e) return; const c=WORKCOLOR[e.work];
-    el.addEventListener("pointerdown",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); }}); });
+    el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); }}); });
   });
   grid.querySelectorAll(".xchip").forEach(el=>{
     const [k,idx]=el.dataset.xchipkey.split("__");
     const list=extraChipsOnDay(k); const e=list[Number(idx)]; if(!e) return;
     if(e.kind==="mtg"){
-      el.addEventListener("pointerdown",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); startDrag(el,ev,{type:"mtg",id:e.site.id,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
+      el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"mtg",id:e.site.id,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
         const s=sites.find(x=>x.id===e.site.id);
         openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{ s.act[0]=dv; s.mtgTime=tv; refresh(); });
       }}); });
@@ -834,7 +850,7 @@ function renderCalendar(){
     if(e.kind==="phase"){
       // ②③⑤⑥：ドラッグで日付移動、クリックで編集。実績があれば実績を、なければ予定を動かす
       const usesAct = !!e.site.act[e.phaseIdx];
-      el.addEventListener("pointerdown",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); startDrag(el,ev,{type:"phase",id:e.site.id,phaseIdx:e.phaseIdx,useAct:usesAct,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
+      el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"phase",id:e.site.id,phaseIdx:e.phaseIdx,useAct:usesAct,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
         const s=sites.find(x=>x.id===e.site.id); const i=e.phaseIdx;
         if(s.act[i]) openDateInline(el,s.act[i],v=>{ s.act[i]=v; refresh(); });
         else openDateInline(el,s.plan[i],v=>{ s.plan[i]=v; refresh(); });
@@ -842,7 +858,7 @@ function renderCalendar(){
       return;
     }
     const field = e.kind==="movein" ? "moveinClean" : "keyChange";
-    el.addEventListener("pointerdown",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); startDrag(el,ev,{type:"extra",id:e.site.id,field,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
+    el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"extra",id:e.site.id,field,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
       const s=sites.find(x=>x.id===e.site.id);
       let opts={}; if(field==="keyChange"&&s.plan[3]) opts.min=dateAdd(s.plan[3],1);
       openDateInline(el,s[field].done,v=>{ if(field==="keyChange"&&v&&s.plan[3]&&v<=s.plan[3]){ alert(`鍵交換の実施日は、④工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return; } s[field].done=v; refresh(); }, opts);
@@ -1487,8 +1503,8 @@ function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"
 
 document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   const t=b.dataset.tab;
-  document.querySelectorAll(".tabbtn").forEach(x=>{x.style.borderBottomColor="transparent"; x.style.color="var(--text-secondary)"; x.style.fontWeight="400";});
-  b.style.borderBottomColor="var(--border-accent)"; b.style.color="var(--text-primary)"; b.style.fontWeight="500";
+  document.querySelectorAll(".tabbtn").forEach(x=>{x.style.background="var(--surface-2)"; x.style.color="var(--text-secondary)"; x.style.borderColor="var(--border-strong)";});
+  b.style.background="var(--text-accent)"; b.style.color="#fff"; b.style.borderColor="var(--text-accent)";
   document.getElementById("tab-matrix").style.display=(t==="matrix")?"block":"none";
   document.getElementById("tab-calendar").style.display=(t==="calendar")?"block":"none";
 }));
