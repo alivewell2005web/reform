@@ -1,0 +1,1606 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工事進捗">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f7f7f5">
+<title>リフォーム進捗管理アプリ v47</title>
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
+<style>
+:root{
+  --bg:#f7f7f5; --surface-1:#f0efea; --surface-2:#ffffff; --surface-3:#e7e6e0;
+  --text-primary:#141412; --text-secondary:#33322d; --text-muted:#5c5b54;
+  --text-success:#1a7f4b; --text-danger:#c0392b; --text-accent:#2563eb; --text-warning:#b7791f;
+  --border:#d9d8d2; --border-strong:#bfbeb7; --border-accent:#2563eb; --border-warning:#e0a94f;
+  --bg-success:#c9ebd6; --bg-accent:#bfdbfe; --bg-accent-muted:#dbeafe; --bg-warning:#fbe6c0; --bg-danger:#fbc9c9; --bg-danger-strong:#f5a9a9;
+  --radius:8px;
+}
+*{box-sizing:border-box;}
+body{margin:0; padding:16px; background:var(--bg); color:var(--text-primary); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; font-size:14px;}
+button{background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:var(--radius); padding:6px 12px; cursor:pointer; color:var(--text-primary); font-family:inherit;}
+button:hover{background:var(--surface-3);}
+select,input[type=text],input[type=date]{background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:var(--radius); padding:6px 10px; color:var(--text-primary); font-family:inherit; width:100%;}
+table{background:var(--surface-2);}
+.sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0);}
+.c-green{background:var(--bg-success); color:var(--text-success);}
+.c-amber{background:var(--bg-warning); color:var(--text-warning);}
+.tabbtn{background:transparent;}
+.viewbtn{background:transparent;}
+#app{max-width:1200px; margin:0 auto;}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div style="padding:0.5rem 0;">
+<h2 class="sr-only">リフォーム進捗 部屋番号・本日色・週表示・未選択強調</h2>
+
+<div id="syncbar" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 10px; margin-bottom:10px; background:var(--surface-1); border:0.5px solid var(--border); border-radius:10px;">
+  <span style="font-size:12px; font-weight:600; color:var(--text-secondary);"><i class="ti ti-cloud" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> 共有</span>
+  <button id="btnSettings" style="font-size:12px; padding:4px 12px;"><i class="ti ti-settings" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> 接続設定</button>
+  <button id="btnLoad" style="font-size:12px; padding:4px 12px;"><i class="ti ti-refresh" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> 最新を読込</button>
+  <span style="width:1px; height:18px; background:var(--border);"></span>
+  <button id="btnExport" style="font-size:12px; padding:4px 10px;"><i class="ti ti-download" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> バックアップ書出</button>
+  <button id="btnImport" style="font-size:12px; padding:4px 10px;"><i class="ti ti-upload" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> 取込</button>
+  <input type="file" id="fileImport" accept="application/json,.json" style="display:none;">
+  <span id="syncStatus" style="font-size:11px; color:var(--text-muted); margin-left:auto;"></span>
+</div>
+
+<div style="display:flex; gap:4px; margin-bottom:1rem; border-bottom:0.5px solid var(--border);">
+  <button class="tabbtn" data-tab="matrix" style="border:none; border-bottom:2px solid var(--border-accent); border-radius:0; padding:8px 16px; font-weight:500;">工事進捗管理表</button>
+  <button class="tabbtn" data-tab="calendar" style="border:none; border-bottom:2px solid transparent; border-radius:0; padding:8px 16px; color:var(--text-secondary);">工事カレンダー</button>
+</div>
+
+<div id="tab-matrix">
+  <div id="stats" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; margin-bottom:1rem;"></div>
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.8rem;">
+    <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px;">
+    <select id="filter" style="width:auto; min-width:130px;"><option value="incomplete">未完了のみ</option><option value="all">すべて表示</option></select>
+    <span style="font-size:12px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;">並べ替え：
+      <button class="sortbtn" data-sort="phase" style="font-size:12px; padding:3px 10px;">現在地</button>
+      <button class="sortbtn" data-sort="name" style="font-size:12px; padding:3px 10px;">現場名</button>
+      <button class="sortbtn" data-sort="date1" style="font-size:12px; padding:3px 10px;">①立会日</button>
+    </span>
+    <button id="clearfilters" style="display:none; font-size:12px; padding:3px 10px; align-items:center; gap:4px; color:var(--text-danger);"><i class="ti ti-filter-off" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> フィルター解除</button>
+    <button id="addbtn" style="margin-left:auto;"><i class="ti ti-plus" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 新規現場</button>
+  </div>
+  <div style="overflow-x:auto; border:0.5px solid var(--border); border-radius:12px;">
+    <table style="border-collapse:collapse; font-size:13px; min-width:1080px;"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+  </div>
+  <div id="detail" style="margin-top:12px;"></div>
+</div>
+
+<div id="tab-calendar" style="display:none;">
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.7rem;">
+    <select id="sitesel" style="width:auto; min-width:150px;"></select>
+    <select id="worksel" style="width:auto; min-width:120px;"></select>
+    <select id="vendorsel" style="width:auto; min-width:130px;"></select>
+    <div style="display:inline-flex; border:0.5px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+      <button id="viewmonth" class="viewbtn" style="border:none; border-radius:0; padding:5px 14px; font-size:13px;">月</button>
+      <button id="viewweek" class="viewbtn" style="border:none; border-radius:0; padding:5px 14px; font-size:13px; color:var(--text-secondary);">週</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
+      <button id="prevp" aria-label="前へ" style="padding:4px 10px;"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+      <span id="perlabel" style="font-weight:500; min-width:150px; text-align:center;"></span>
+      <button id="nextp" aria-label="次へ" style="padding:4px 10px;"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+    </div>
+    <button id="pdfbtn" style="font-size:13px;"><i class="ti ti-file-type-pdf" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 業者向けPDF</button>
+  </div>
+  <div id="legend" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;"></div>
+  <div id="calhint" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;"></div>
+  <div id="calgrid" style="position:relative; user-select:none; touch-action:none;"></div>
+  <div id="unassigned" style="margin-top:14px;"></div>
+</div>
+</div>
+
+<script>
+const APP_TITLE=document.title; // 印刷時にタイトルを差し替えた後の復元用
+const PHASES=["①退去立会","②見積作成・提出","③管理会社発注","④工事手配・工程管理","⑤完了チェック","⑥完了報告・請求書発行"];
+const NPHASE=6;
+// 入居前清掃・鍵交換・退去立会の色/略号（カレンダー単日チップ用に新設）
+const EXTRA_MOVEIN={key:"入居前清掃", abbr:"入居清掃", color:{bg:"#FFE4E6",done:"#FB7185",fg:"#9F1239"}};
+const EXTRA_KEY   ={key:"鍵交換",     abbr:"鍵交換",  color:{bg:"#FEF9C3",done:"#EAB308",fg:"#854D0E"}};
+const EXTRA_MTG   ={key:"退去立会",   abbr:"立会",    color:{bg:"#E0E7FF",done:"#6366F1",fg:"#312E81"}};
+const PHASE_MILESTONE_COLOR={bg:"#F1F5F9",done:"#64748B",fg:"#334155"}; // ②③⑤⑥の工程チップ色
+const WORKDEF={"リフォーム":{type:"span"},"クリーニング":{type:"single"},"設備交換":{type:"multi"},"リペア":{type:"single"},"畳・ふすま":{type:"single"},"設備廃棄":{type:"single"},"その他":{type:"multi"}};
+const WORKS=Object.keys(WORKDEF);
+const WORKABBR={"リフォーム":"内装","クリーニング":"清掃","設備交換":"設備","リペア":"リペア","畳・ふすま":"畳・襖","設備廃棄":"廃棄","その他":"他"};
+const WORKCOLOR={
+  "リフォーム":{bg:"#BFDBFE",done:"#3B82F6",fg:"#1E3A8A"},
+  "クリーニング":{bg:"#A7F3D0",done:"#10B981",fg:"#065F46"},
+  "設備交換":{bg:"#FDE68A",done:"#F59E0B",fg:"#92400E"},
+  "リペア":{bg:"#FBCFE8",done:"#EC4899",fg:"#9D174D"},
+  "畳・ふすま":{bg:"#DDD6FE",done:"#8B5CF6",fg:"#5B21B6"},
+  "設備廃棄":{bg:"#D1D5DB",done:"#6B7280",fg:"#374151"},
+  "その他":{bg:"#A5F3FC",done:"#06B6D4",fg:"#155E75"},
+};
+let vendorMaster=["アルファ","ZERO","大松","シャムス","森上","ガリバー"];
+// 物件（マンション）マスタ。新規現場登録時のプルダウン候補。編集は「接続設定」内の物件マスタ管理から。
+let buildingMaster=["Gran Bridge Dempo","ウェルホームズ中之島北","ネット　フローラ立売堀","ネットフローラ天満橋","パークアクシスうつぼ公園","パークキューブ北浜","パークタワー梅田","パークタワー北浜","芦屋ガーデン","西天満レジデンス","大阪福島タワー","天満橋ケルスコート","天満橋ケルスコートParkView","堂島レジデンス","北梅田パーク・レジデンス","GateCourt豊中","パークノヴァ西岡本","グランシャリオ夙川","Crescent-T","ヌーヴェレールⅢ","壱番館","GateCourt大阪福島","パークフラッツ弁天町駅前","パークフラッツ安堂寺町","MidCourtウメキタ","MidCourt東三国","GateCourt東三国","パークフラッツ東三国","FS江坂広芝町Ⅱ","GateCourt新大阪North","GateCourt福島海老江","FS福島パークサイド","FF江坂江の木町パークサイド"];
+// 工事種別ごとのデフォルト担当業者
+const DEFAULT_VENDOR={"リフォーム":"アルファ","クリーニング":"ZERO","設備交換":"大松","リペア":"シャムス","畳・ふすま":"森上","設備廃棄":"ガリバー","その他":null};
+
+const TODAY=new Date(); TODAY.setHours(0,0,0,0);
+function todayKey(){ return iso(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()); }
+
+// 日本の祝日・振替休日（国立天文台 暦要項 2025-2027 確定値。2028年以降は公式未確定のため非搭載）
+const HOLIDAYS={
+  "2025-01-01":"元日","2025-01-13":"成人の日","2025-02-11":"建国記念の日","2025-02-23":"天皇誕生日","2025-02-24":"振替休日","2025-03-20":"春分の日","2025-04-29":"昭和の日","2025-05-03":"憲法記念日","2025-05-04":"みどりの日","2025-05-05":"こどもの日","2025-05-06":"振替休日","2025-07-21":"海の日","2025-08-11":"山の日","2025-09-15":"敬老の日","2025-09-23":"秋分の日","2025-10-13":"スポーツの日","2025-11-03":"文化の日","2025-11-23":"勤労感謝の日","2025-11-24":"振替休日",
+  "2026-01-01":"元日","2026-01-12":"成人の日","2026-02-11":"建国記念の日","2026-02-23":"天皇誕生日","2026-03-20":"春分の日","2026-04-29":"昭和の日","2026-05-03":"憲法記念日","2026-05-04":"みどりの日","2026-05-05":"こどもの日","2026-05-06":"振替休日","2026-07-20":"海の日","2026-08-11":"山の日","2026-09-21":"敬老の日","2026-09-22":"国民の休日","2026-09-23":"秋分の日","2026-10-12":"スポーツの日","2026-11-03":"文化の日","2026-11-23":"勤労感謝の日",
+  "2027-01-01":"元日","2027-01-11":"成人の日","2027-02-11":"建国記念の日","2027-02-23":"天皇誕生日","2027-03-21":"春分の日","2027-03-22":"振替休日","2027-04-29":"昭和の日","2027-05-03":"憲法記念日","2027-05-04":"みどりの日","2027-05-05":"こどもの日","2027-07-19":"海の日","2027-08-11":"山の日","2027-09-20":"敬老の日","2027-09-23":"秋分の日","2027-10-11":"スポーツの日","2027-11-03":"文化の日","2027-11-23":"勤労感謝の日",
+};
+function holidayName(key){ return HOLIDAYS[key]||null; }
+
+function newSite(id,name,room,category){return {id,name,room,category:category||"三井",plan:[null,null,null,null,null,null],act:[null,null,null,null,null,null],works:{},open:false,
+  mtgTime:null,                        // 退去立会の時刻（hh:mm）
+  moveinClean:{order:null,done:null},  // 入居前清掃（発注/実施）
+  keyChange:{order:null,done:null},    // 鍵交換（発注/実施）
+  billTo:"デザイン",     // 請求先（デザイン/ウエル/レジデンシャル）
+  furniture:"なし",      // 家具有無（あり/なし）
+  autolock:"",           // オートロック（呼5100 / ※1234呼 / フリー入力）
+  note:"" };}            // 備考（当社/オープン/電気メーター/水道メーター/南京5100 / フリー入力）
+const BILL_OPTS=["デザイン","ウエル","レジデンシャル"];
+const FURN_OPTS=["なし","あり"];
+const AUTOLOCK_PRESETS=["呼5100","※1234呼"];   // 加えてフリー入力（空欄デフォルト）
+const NOTE_PRESETS=["当社","オープン","電気メーター","水道メーター","南京5100"]; // 加えてフリー入力（空欄デフォルト）
+let sites=[
+  Object.assign(newSite(1,"パークアクシスうつぼ公園","803","三井"),{plan:["2026-08-05","2026-08-07","2026-08-10","2026-08-12","2026-08-20","2026-08-28"],act:["2026-08-01","2026-08-03","2026-08-05",null,null,null],
+    mtgTime:"10:00",billTo:"デザイン",furniture:"なし",autolock:"呼5100",note:"当社",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-15",done:"2026-08-17"},
+    works:{"リフォーム":{start:"2026-08-06",end:"2026-08-08",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-10",act:null,vendor:"ZERO",cleanFee:38000,acFee:12000,peelFee:0},"設備交換":{items:[{name:"浴室乾燥機",plan:null,act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-12",act:null,vendor:"シャムス"},"設備廃棄":{plan:"2026-08-06",act:null,vendor:"ガリバー"}}}),
+  Object.assign(newSite(2,"パークキューブ北浜","1205","三井"),{plan:["2026-08-06","2026-08-08","2026-08-11","2026-08-25","2026-08-24","2026-08-31"],act:["2026-08-15","2026-08-18","2026-08-19",null,null,null],
+    mtgTime:"13:30",billTo:"ウエル",furniture:"あり",autolock:"※1234呼",note:"オープン",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-19",done:"2026-08-27"},
+    works:{"リフォーム":{start:"2026-08-20",end:"2026-08-22",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-24",act:null,vendor:"ZERO",cleanFee:45000,acFee:24000,peelFee:15000},"設備交換":{items:[{name:"給湯器交換",plan:"2026-08-20",act:null,vendor:"大松"},{name:"レンジフード交換",plan:"2026-08-21",act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-25",act:null,vendor:"シャムス"},"畳・ふすま":{plan:"2026-08-21",act:null,vendor:"森上"}}}),
+  Object.assign(newSite(3,"西天満レジデンス","305","三井"),{plan:["2026-08-04","2026-08-06","2026-08-08","2026-08-19","2026-08-26","2026-08-31"],act:["2026-08-08","2026-08-10","2026-08-12",null,null,null],
+    mtgTime:"09:00",billTo:"レジデンシャル",furniture:"なし",autolock:"",note:"",moveinClean:{order:"2026-08-24",done:"2026-08-28"},keyChange:{order:"2026-08-24",done:null},
+    works:{"リフォーム":{start:"2026-08-13",end:"2026-08-17",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-18",act:null,vendor:"ZERO",cleanFee:40000,acFee:12000,peelFee:0},"リペア":{plan:"2026-08-19",act:null,vendor:"シャムス"},"畳・ふすま":{plan:"2026-08-13",act:null,vendor:"森上"},"設備廃棄":{plan:"2026-08-14",act:null,vendor:"ガリバー"}}}),
+  Object.assign(newSite(4,"ﾌｧｰｽﾄｽﾃｰｼﾞ江坂広芝町Ⅱ","301","自社"),{plan:[null,null,null,"2026-08-28",null,null],act:["2026-08-23",null,null,null,null,null],
+    mtgTime:"16:00",billTo:"デザイン",furniture:"なし",autolock:"",note:"",moveinClean:{order:null,done:null},keyChange:{order:null,done:null},
+    works:{"リフォーム":{start:"2026-08-25",end:"2026-08-27",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-28",act:null,vendor:"ZERO"}}}),
+];
+let nextId=5;
+let calAnchor=new Date(TODAY);
+let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
+let sortKey="phase"; // phase | name | date1
+// 列フィルター状態。null＝無効。
+// name/status/vendorはSet、phaseRange[i]は各工程i(0-5)の日付範囲{from,to}、moveinRange/keyRangeは入居前清掃/鍵交換の実施日範囲
+let colFilters={ name:null, status:null, vendor:null, category:null,
+  phaseRange:[null,null,null,null,null,null], moveinRange:null, keyRange:null };
+
+function currentPhase(s){let d=0;for(let i=0;i<NPHASE;i++){if(s.act[i])d=i+1;}return d;}
+// 区分ごとに使う工程インデックス（自社は①④⑤=0,3,4のみ）
+function activePhases(s){ return s.category==="自社" ? [0,3,4] : [0,1,2,3,4,5]; }
+function isPhaseActive(s,i){ return activePhases(s).includes(i); }
+// 区分ごとに入居前清掃・鍵交換を使うか（自社は使わない）
+function usesExtra(s){ return s.category!=="自社"; }
+// 現場が完了扱いか。三井：全6工程＋鍵交換実施。自社：⑤完了チェック実績。
+function isComplete(s){
+  if(s.category==="自社") return !!s.act[4];
+  return currentPhase(s)>=NPHASE && !!(s.keyChange && s.keyChange.done);
+}
+function fmt(d){if(!d)return null;const p=d.split("-");return `${parseInt(p[1])}/${parseInt(p[2])}`;}
+function iso(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;}
+function parseISO(key){const p=key.split("-");return new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));}
+function dateAdd(key,days){const d=parseISO(key); d.setDate(d.getDate()+days); return iso(d.getFullYear(),d.getMonth(),d.getDate());}
+function dateDiff(a,b){return Math.round((parseISO(b)-parseISO(a))/86400000);}
+function allVendorsInUse(){const set=new Set(vendorMaster); sites.forEach(s=>Object.values(s.works).forEach(wk=>{if(wk.items){wk.items.forEach(it=>it.vendor&&set.add(it.vendor));}else if(wk.vendor)set.add(wk.vendor);})); return [...set];}
+function hasMissingVendor(s){
+  return Object.keys(s.works).some(w=>{const wk=s.works[w]; if(WORKDEF[w].type==="multi"){return (wk.items||[]).some(it=>!it.vendor);} return !wk.vendor;});
+}
+
+function renderStats(){
+  const total=sites.length, incomplete=sites.filter(s=>!isComplete(s)).length;
+  const est=sites.filter(s=>{const c=currentPhase(s);return c>=1&&c<3;}).length;
+  const done=sites.filter(s=>isComplete(s)).length;
+  document.getElementById("stats").innerHTML=[["現場総数",total],["未完了",incomplete],["見積〜発注段階",est],["完了",done]].map(([l,v])=>
+    `<div style="background:var(--surface-1); border-radius:var(--radius); padding:0.7rem 0.9rem;"><div style="font-size:12px; color:var(--text-secondary);">${l}</div><div style="font-size:22px; font-weight:500;">${v}</div></div>`).join("");
+}
+function filterIcon(key){
+  let on=false;
+  if(key==="name") on=!!colFilters.name;
+  else if(key==="category") on=!!colFilters.category;
+  else if(key==="status") on=!!colFilters.status;
+  else if(key==="movein") on=!!colFilters.moveinRange;
+  else if(key==="key") on=!!colFilters.keyRange;
+  else if(key.startsWith("phase")){ const i=Number(key.slice(5)); on=!!colFilters.phaseRange[i] || (i===3&&!!colFilters.vendor); }
+  return `<span data-colfilter="${key}" title="フィルター" style="cursor:pointer; margin-left:3px; color:${on?'var(--text-accent)':'var(--text-muted)'};"><i class="ti ti-filter${on?'-filled':''}" aria-hidden="true" style="font-size:12px; vertical-align:-2px;"></i></span>`;
+}
+// 列フィルターのポップアップ
+function openColFilter(key,anchorEl){
+  const old=document.getElementById("colfilterpop"); if(old) old.remove();
+  const box=document.createElement("div");
+  box.id="colfilterpop";
+  box.style.cssText="position:fixed; z-index:10000; min-width:200px; max-width:280px; max-height:360px; overflow:auto; padding:10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); box-shadow:0 6px 20px rgba(0,0,0,.18); font-size:12px;";
+  let inner="";
+  const checklist=(title,values,cur)=>{
+    const set = cur || new Set(values);
+    return `<div style="font-weight:600; margin-bottom:6px;">${title}</div>
+      <div style="margin-bottom:6px; display:flex; gap:8px;"><a href="#" data-all="1" style="color:var(--text-accent);">全選択</a><a href="#" data-none="1" style="color:var(--text-accent);">全解除</a></div>
+      <div style="display:flex; flex-direction:column; gap:3px; max-height:200px; overflow:auto;">`+
+      values.map(v=>`<label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" data-cv="${encodeURIComponent(v)}" ${(!cur||set.has(v))?'checked':''}> ${v||'(空)'}</label>`).join("")+`</div>`;
+  };
+  const dateRange=(title,cur)=>{
+    const f=cur&&cur.from?cur.from:"", t=cur&&cur.to?cur.to:"";
+    return `<div style="font-weight:600; margin-bottom:6px;">${title}</div>
+      <label style="display:block; margin-bottom:4px;">開始 <input type="date" id="frFrom" value="${f}" style="font-size:12px; padding:2px 4px;"></label>
+      <label style="display:block;">終了 <input type="date" id="frTo" value="${t}" style="font-size:12px; padding:2px 4px;"></label>`;
+  };
+  let phaseIdx=-1;
+  if(key==="name") inner=checklist("現場名で絞り込み", distinctNames(), colFilters.name);
+  else if(key==="category") inner=checklist("区分で絞り込み", distinctCategories(), colFilters.category);
+  else if(key==="status") inner=checklist("状態で絞り込み", distinctStatuses(), colFilters.status);
+  else if(key==="movein") inner=dateRange("入居前清掃 実施日で絞り込み", colFilters.moveinRange);
+  else if(key==="key") inner=dateRange("鍵交換 実施日で絞り込み", colFilters.keyRange);
+  else if(key.startsWith("phase")){
+    phaseIdx=Number(key.slice(5));
+    inner=dateRange(`${PHASES[phaseIdx]}の日付で絞り込み`, colFilters.phaseRange[phaseIdx]);
+    if(phaseIdx===3){ inner+=`<div style="margin-top:8px;">`+checklist("業者で絞り込み", distinctVendors(), colFilters.vendor)+`</div>`; }
+  }
+  box.innerHTML=inner+`<div style="display:flex; gap:6px; justify-content:flex-end; margin-top:10px; border-top:0.5px solid var(--border); padding-top:8px;">
+    <button id="cfClear" style="font-size:12px; padding:3px 10px;">クリア</button>
+    <button id="cfApply" style="font-size:12px; padding:3px 12px; background:var(--text-accent); color:#fff; border-color:var(--text-accent);">適用</button></div>`;
+  document.body.appendChild(box);
+  const r=anchorEl.getBoundingClientRect();
+  let left=r.left, top=r.bottom+4;
+  if(left+280>window.innerWidth-6) left=window.innerWidth-6-280;
+  if(left<6) left=6;
+  box.style.left=left+"px"; box.style.top=Math.max(6,top)+"px";
+  box.querySelectorAll("[data-all]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault(); box.querySelectorAll("[data-cv]").forEach(c=>c.checked=true);}));
+  box.querySelectorAll("[data-none]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault(); box.querySelectorAll("[data-cv]").forEach(c=>c.checked=false);}));
+  const close=()=>{ box.remove(); document.removeEventListener("pointerdown",outside,true); };
+  const outside=(e)=>{ if(!box.contains(e.target)&&e.target!==anchorEl&&!anchorEl.contains(e.target)) close(); };
+  setTimeout(()=>document.addEventListener("pointerdown",outside,true),0);
+  const readChecks=()=>{ const all=[...box.querySelectorAll("[data-cv]")]; const checked=all.filter(c=>c.checked).map(c=>decodeURIComponent(c.dataset.cv)); return {all:all.length,checked}; };
+  const readRange=()=>{ const f=box.querySelector("#frFrom").value||null, t=box.querySelector("#frTo").value||null; return (f||t)?{from:f,to:t}:null; };
+  box.querySelector("#cfApply").addEventListener("click",()=>{
+    if(key==="name"||key==="status"||key==="category"){ const {all,checked}=readChecks(); colFilters[key]= (checked.length===all)?null:new Set(checked); }
+    else if(key==="movein"){ colFilters.moveinRange=readRange(); }
+    else if(key==="key"){ colFilters.keyRange=readRange(); }
+    else if(key.startsWith("phase")){ colFilters.phaseRange[phaseIdx]=readRange(); if(phaseIdx===3){ const {all,checked}=readChecks(); colFilters.vendor=(checked.length===all)?null:new Set(checked); } }
+    close(); renderHead(); renderBody();
+  });
+  box.querySelector("#cfClear").addEventListener("click",()=>{
+    if(key==="name") colFilters.name=null;
+    else if(key==="category") colFilters.category=null;
+    else if(key==="status") colFilters.status=null;
+    else if(key==="movein") colFilters.moveinRange=null;
+    else if(key==="key") colFilters.keyRange=null;
+    else if(key.startsWith("phase")){ colFilters.phaseRange[phaseIdx]=null; if(phaseIdx===3) colFilters.vendor=null; }
+    close(); renderHead(); renderBody();
+  });
+}
+function renderHead(){
+  const extraTh=[["⑦","入居前清掃","movein"],["⑧","鍵交換","key"]].map(([num,n,fk])=>`<th style="padding:8px 4px; text-align:center; min-width:84px; font-weight:400; font-size:13px; border-left:0.5px solid var(--border);">${num}${filterIcon(fk)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${n}</div></th>`).join("");
+  document.getElementById("thead").innerHTML=`<tr style="background:var(--surface-1); color:var(--text-secondary);">
+    <th style="padding:9px 6px; text-align:center; position:sticky; left:0; background:var(--surface-1); min-width:56px; border-right:0.5px solid var(--border); font-size:13px;">区分${filterIcon("category")}</th>
+    <th style="padding:9px 10px; text-align:left; min-width:186px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
+    <th style="padding:9px 6px; text-align:left; min-width:92px; border-right:0.5px solid var(--border); font-size:13px;">現在地${filterIcon("status")}</th>
+    ${PHASES.map((p,idx)=>{const nm=p.slice(1).replace("・工程管理","<br>・工程管理").replace("・請求書発行","<br>・請求書発行"); return `<th style="padding:8px 4px; text-align:center; min-width:72px; font-weight:400; font-size:13px;">${p.slice(0,1)}${filterIcon("phase"+idx)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${nm}</div></th>`;}).join("")}
+    ${extraTh}</tr>`;
+  document.querySelectorAll("[data-colfilter]").forEach(el=>el.addEventListener("click",(e)=>{ e.stopPropagation(); openColFilter(el.dataset.colfilter, el); }));
+}
+// 入居前清掃・鍵交換セル（発注/実施の2段、横に日付）
+function extraCellHtml(s,field){
+  if(!usesExtra(s)){ return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); background:var(--surface-1);"><span style="color:var(--text-muted); font-size:11px;">—</span></td>`; }
+  const o=fmt(s[field].order), dn=fmt(s[field].done), filled=!!s[field].done;
+  return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); ${filled?'background:var(--bg-success);':''}">
+    <div style="font-size:12px; white-space:nowrap;"><span style="color:var(--text-muted);">発注</span> <span data-xedit="${s.id}:${field}:order" style="cursor:pointer; color:var(--text-secondary);">${o||'—'}</span></div>
+    <div style="font-size:12px; white-space:nowrap; margin-top:3px;"><span style="color:var(--text-muted);">実施</span> <span data-xedit="${s.id}:${field}:done" style="cursor:pointer; ${dn?'color:var(--text-success); font-weight:500;':'color:var(--text-muted);'}">${dn||'—'}</span></div></td>`;
+}
+function cellHtml(s,i){
+  // 区分で使わない工程はグレーアウト・入力不可
+  if(!isPhaseActive(s,i)){ return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); background:var(--surface-1);"><span style="color:var(--text-muted); font-size:11px;">—</span></td>`; }
+  const plan=fmt(s.plan[i]),act=fmt(s.act[i]),filled=!!act;
+  // ④(i=3) 工事手配・工程管理：④内訳の最終工事日を自動反映（日付のみ表示、編集不可）
+  if(i===3){
+    return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border);">
+      <div title="工事の最終日を自動反映" style="font-size:13px;">${plan?`<span style="color:var(--text-secondary);">${plan}</span>`:'<span style="color:var(--text-muted);">自動</span>'}<i class="ti ti-refresh" aria-hidden="true" style="font-size:10px; vertical-align:0; margin-left:2px; color:var(--text-muted);"></i></div></td>`;
+  }
+  // ①(i=0) 退去立会：日付＋時刻(hh:mm)。日付未入力は「未定」
+  if(i===0){
+    const bg0 = act ? 'background:var(--bg-success);' : '';
+    const timeStr = s.mtgTime || '';
+    return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); ${bg0}">
+      <div data-edit="${s.id}:0:act" style="cursor:pointer; font-size:13px;">${act?`<span style="color:var(--text-success); font-weight:500;">${act}</span>`:'<span style="color:var(--text-muted);">未定</span>'}</div>
+      <div data-mtgtime="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${timeStr?`<span style="color:var(--text-secondary);"><i class="ti ti-clock" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${timeStr}</span>`:'<span style="color:var(--text-muted);">時刻</span>'}</div></td>`;
+  }
+  // ⑤(i=4) 完了チェック：単日。工事最終日より前なら警告背景
+  let bg = filled?'background:var(--bg-success);':'';
+  let warnTip="";
+  if(i===4 && phase6IsPast(s)){ bg='background:var(--bg-danger, #fbc9c9);'; warnTip=' title="完了チェック日が④工事の最終日より前です"'; }
+  // ③(i=2) 管理会社発注：鍵交換の発注日があるのに③発注日が空なら濃い赤で警告
+  if(i===2 && !s.act[2] && s.keyChange && s.keyChange.order){ bg='background:var(--bg-danger-strong, #f5a9a9);'; warnTip=' title="鍵交換が発注済みですが③管理会社発注が未入力です"'; }
+  const emptyLabel = '<span style="color:var(--text-muted);">日付</span>';
+  return `<td${warnTip} style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); ${bg}">
+    <div data-edit="${s.id}:${i}:act" style="cursor:pointer; font-size:13px;">${act?`<span style="color:var(--text-success); font-weight:500;">${act}</span>`:emptyLabel}</div></td>`;
+}
+function siteVendors(s){ // その現場に登録された業者名を集約
+  let vs=[];
+  Object.keys(s.works).forEach(w=>{ const t=WORKDEF[w].type, wk=s.works[w];
+    if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.vendor)vs.push(it.vendor); }); }
+    else if(wk.vendor){ vs.push(wk.vendor); }
+  });
+  return vs;
+}
+// 現場の状態ラベル（フィルター用）
+// 現在地の短縮ラベル（丸番号つき）
+const STATUS_WAIT=["①立会日待ち","②見積待ち","③発注待ち","④工事手配待ち","⑤完了チェック待ち","⑥請求書発行待ち"];
+const STATUS_KEY_WAIT="⑧鍵交換待ち";
+function statusLabel(s){
+  if(isComplete(s)) return "完了";
+  if(s.category==="自社"){
+    // 自社は①④⑤の順。次に必要な工程を待ち表示
+    for(const i of [0,3,4]){ if(!s.act[i]) return STATUS_WAIT[i]; }
+    return "完了";
+  }
+  const cp=currentPhase(s);
+  if(cp>=NPHASE) return STATUS_KEY_WAIT; // ⑥まで完了→鍵交換待ち（⑦入居前清掃は待ち条件にしない）
+  return STATUS_WAIT[cp];
+}
+// 現場の全工事日（span終了/single・multi予定）の最小・最大
+function siteWorkDates(s){
+  let ds=[];
+  Object.keys(s.works).forEach(w=>{ const t=WORKDEF[w].type, wk=s.works[w];
+    if(t==="span"){ if(wk.start)ds.push(wk.start); if(wk.end)ds.push(wk.end); }
+    else if(t==="single"){ if(wk.plan)ds.push(wk.plan); }
+    else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.plan)ds.push(it.plan); }); }
+  });
+  ds.sort(); return ds;
+}
+// 全現場から重複なしの値リスト
+function distinctNames(){ return [...new Set(sites.map(s=>`${s.name} ${s.room}号室`))].sort((a,b)=>a.localeCompare(b,"ja")); }
+function distinctCategories(){ return [...new Set(sites.map(s=>s.category))]; }
+function distinctStatuses(){ return [...new Set(sites.map(statusLabel))]; }
+function distinctVendors(){ let v=new Set(); sites.forEach(s=>siteVendors(s).forEach(x=>v.add(x))); return [...v].sort((a,b)=>a.localeCompare(b,"ja")); }
+function phaseDate(s,i){ return s.act[i] || (i===3 ? s.plan[3] : null); }
+function inRangeVal(d,range){ if(!range)return true; if(!d)return false; if(range.from&&d<range.from)return false; if(range.to&&d>range.to)return false; return true; }
+// 列フィルターを1現場に適用
+function passColFilters(s){
+  if(colFilters.name && !colFilters.name.has(`${s.name} ${s.room}号室`)) return false;
+  if(colFilters.category && !colFilters.category.has(s.category)) return false;
+  if(colFilters.status && !colFilters.status.has(statusLabel(s))) return false;
+  if(colFilters.vendor){ const vs=siteVendors(s); if(!vs.some(v=>colFilters.vendor.has(v))) return false; }
+  for(let i=0;i<NPHASE;i++){ if(colFilters.phaseRange[i] && !inRangeVal(phaseDate(s,i),colFilters.phaseRange[i])) return false; }
+  if(colFilters.moveinRange && !inRangeVal(s.moveinClean.done,colFilters.moveinRange)) return false;
+  if(colFilters.keyRange && !inRangeVal(s.keyChange.done,colFilters.keyRange)) return false;
+  return true;
+}
+function anyColFilterActive(){ return !!(colFilters.name||colFilters.category||colFilters.status||colFilters.vendor||colFilters.moveinRange||colFilters.keyRange||colFilters.phaseRange.some(r=>r)); }
+function renderBody(){
+  const f=document.getElementById("filter").value;
+  const q=(document.getElementById("search").value||"").trim().toLowerCase();
+  let rows=sites.slice();
+  if(f==="incomplete") rows=rows.filter(s=>!isComplete(s));
+  if(q){ rows=rows.filter(s=>{
+    const hay=[s.name,s.room,s.name+" "+s.room+"号室",...siteVendors(s)].join(" ").toLowerCase();
+    return hay.includes(q);
+  }); }
+  rows=rows.filter(passColFilters);
+  // 並べ替え（切替式）
+  if(sortKey==="name") rows.sort((a,b)=>(a.name+a.room).localeCompare(b.name+b.room,"ja"));
+  else if(sortKey==="date1") rows.sort((a,b)=>(a.act[0]||a.plan[0]||"9999").localeCompare(b.act[0]||b.plan[0]||"9999"));
+  else rows.sort((a,b)=>currentPhase(a)-currentPhase(b)); // phase（既定）
+  // ソートボタンのアクティブ表示
+  document.querySelectorAll(".sortbtn").forEach(b=>{ const on=b.dataset.sort===sortKey;
+    b.style.background=on?"var(--text-accent)":"var(--surface-2)"; b.style.color=on?"#fff":"var(--text-primary)"; b.style.fontWeight=on?"600":"400"; });
+  const tb=document.getElementById("tbody");
+  if(rows.length===0){tb.innerHTML=`<tr><td colspan="13" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; renderDetail(sites.find(s=>s.open)||null); updateFilterClearBtn(); return;}
+  tb.innerHTML=rows.map(s=>{
+    const cp=currentPhase(s);
+    const sl=statusLabel(s);
+    const status = (sl==="完了")
+      ? `<span class="c-green" style="font-size:11px; padding:2px 6px; border-radius:var(--radius); white-space:nowrap;">完了</span>`
+      : `<span class="c-amber" style="font-size:11px; padding:2px 6px; border-radius:var(--radius); font-weight:500; white-space:nowrap;">${sl}</span>`;
+    const wn=Object.keys(s.works).length;
+    const missing = hasMissingVendor(s);
+    const missBadge = missing ? `<span title="業者未設定の工事があります" style="font-size:10px; padding:1px 7px; border-radius:var(--radius); background:var(--bg-warning); color:var(--text-warning); margin-left:6px;"><i class="ti ti-user-exclamation" aria-hidden="true" style="font-size:11px; vertical-align:-1px;"></i> 業者未設定</span>` : "";
+    const catColor = s.category==="自社" ? {bg:"#e0e7ff",fg:"#3730a3"} : {bg:"#fef3c7",fg:"#92400e"};
+    return `<tr style="border-top:0.5px solid var(--border); ${s.open?'background:var(--bg-accent-muted);':''}">
+      <td style="padding:8px 6px; text-align:center; position:sticky; left:0; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
+        <span style="display:inline-block; font-size:11px; font-weight:600; padding:2px 7px; border-radius:var(--radius); background:${catColor.bg}; color:${catColor.fg};">${s.category}</span></td>
+      <td style="padding:8px 10px; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
+        <div style="display:flex; align-items:flex-start; gap:6px;">
+          <div data-toggle="${s.id}" style="cursor:pointer; flex:1;">
+            <div style="font-weight:500;"><i class="ti ti-chevron-${s.open?'down':'right'}" aria-hidden="true" style="font-size:13px; vertical-align:-1px;"></i> ${s.name}</div>
+            <div style="font-size:11px; color:var(--text-secondary); padding-left:16px;">${s.room}号室${wn?` · ④内訳${wn}件`:""}${missBadge}</div>
+          </div>
+          <button data-siteedit="${s.id}" title="現場名・区分を編集" style="flex:none; font-size:11px; padding:2px 7px; color:var(--text-secondary); border-color:var(--border);"><i class="ti ti-pencil" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
+          <button data-sitedel="${s.id}" title="この現場を削除" style="flex:none; font-size:11px; padding:2px 7px; color:var(--text-danger); border-color:var(--border);"><i class="ti ti-trash" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
+        </div></td>
+      <td style="padding:8px 8px; border-right:0.5px solid var(--border);">${status}</td>
+      ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}</tr>`;
+  }).join("");
+  tb.querySelectorAll("[data-toggle]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.toggle)); if(s){const was=s.open; sites.forEach(x=>x.open=false); s.open=!was; refresh();}}));
+  tb.querySelectorAll("[data-siteedit]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); openEditSiteModal(Number(el.dataset.siteedit));}));
+  tb.querySelectorAll("[data-sitedel]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); const id=Number(el.dataset.sitedel); const s=sites.find(x=>x.id===id); if(!s)return; if(confirm(`「${s.name} ${s.room}号室」を削除します。工事内訳や金額など、この現場の全データが消えます。よろしいですか？`)){ sites=sites.filter(x=>x.id!==id); refresh(); }}));
+  tb.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>{const [id,idx,kind]=el.dataset.edit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return; const i=Number(idx);
+    if(i===0){ openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{s.act[0]=dv; s.mtgTime=tv; refresh();}); return; }
+    openDateInline(el,s[kind][i],(v)=>{s[kind][i]=v; refresh();});}));
+  tb.querySelectorAll("[data-mtgtime]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.mtgtime)); if(!s)return; openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{s.act[0]=dv; s.mtgTime=tv; refresh();});}));
+  tb.querySelectorAll("[data-xedit]").forEach(el=>el.addEventListener("click",()=>{const [id,field,k]=el.dataset.xedit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return;
+    // 鍵交換の実施日は④予定日(plan[3])より後のみ許可
+    let opts={};
+    if(field==="keyChange" && k==="done" && s.plan[3]){ opts.min=dateAdd(s.plan[3],1); }
+    openDateInline(el,s[field][k],(v)=>{
+      if(field==="keyChange" && k==="done" && v && s.plan[3] && v<=s.plan[3]){
+        alert(`鍵交換の実施日は、④工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return;
+      }
+      s[field][k]=v; refresh();
+    }, opts);
+  }));
+  renderDetail(sites.find(s=>s.open)||null);
+  updateFilterClearBtn();
+}
+// フィルターが有効なとき「フィルター解除」ボタンを表示
+function updateFilterClearBtn(){
+  const btn=document.getElementById("clearfilters"); if(!btn) return;
+  btn.style.display = anyColFilterActive() ? "inline-flex" : "none";
+}
+function clearAllColFilters(){ colFilters={ name:null, status:null, vendor:null, category:null, phaseRange:[null,null,null,null,null,null], moveinRange:null, keyRange:null }; renderHead(); renderBody(); }
+
+function getByPath(o,p){for(const k of p.split(":"))o=o[k];return o;}
+function setByPath(o,p,v){const ks=p.split(":");for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=v;}
+function vendorSelectHtml(path,cur){
+  const missing=!cur;
+  const opts=`<option value=""${!cur?' selected':''}>業者未設定</option>`
+    +vendorMaster.map(v=>`<option value="${v}"${v===cur?' selected':''}>${v}</option>`).join("")
+    +`<option value="__new__">＋ 新規業者を入力</option>`;
+  return `<select data-vsel="${path}" style="width:auto; min-width:130px; font-size:11px; padding:2px 6px; ${missing?'border-color:var(--border-warning); color:var(--text-warning);':''}">${opts}</select>`;
+}
+// 数値（金額）入力
+function moneyInputHtml(dataAttr,cur){
+  return `<input type="number" inputmode="numeric" ${dataAttr} value="${cur!=null?cur:''}" placeholder="0" style="width:74px; font-size:11px; padding:2px 5px; text-align:right;">`;
+}
+// 単純プルダウン（請求先・家具）
+function simpleSelectHtml(dataAttr,cur,options){
+  return `<select ${dataAttr} style="width:auto; min-width:88px; font-size:11px; padding:2px 6px;">`+
+    options.map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join("")+`</select>`;
+}
+// プルダウン＋フリー入力（オートロック・備考）。プリセット選択かフリー入力。現在値がプリセット外ならフリー入力欄に表示。
+function presetOrFreeHtml(kind,cur,presets){
+  const isPreset=presets.includes(cur);
+  const sel=`<select data-preset="${kind}" style="width:auto; min-width:96px; font-size:11px; padding:2px 6px;">`+
+    `<option value="__free__"${!isPreset?' selected':''}>フリー入力</option>`+
+    presets.map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join("")+`</select>`;
+  const free=`<input type="text" data-free="${kind}" value="${isPreset?'':(cur||'').replace(/"/g,'&quot;')}" placeholder="（空欄可）" style="width:96px; font-size:11px; padding:2px 5px; ${isPreset?'display:none;':''}">`;
+  return `<span style="display:inline-flex; gap:4px; align-items:center;">${sel}${free}</span>`;
+}
+
+function renderDetail(s){
+  const d=document.getElementById("detail");
+  if(!s){d.innerHTML=""; return;}
+  let rows="";
+  const dot=(w)=>{const col=WORKCOLOR[w]; return `<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${col.bg}; border:1px solid ${col.fg}; margin-right:5px; vertical-align:0;"></span>`;};
+  Object.keys(s.works).forEach(w=>{
+    const t=WORKDEF[w].type, wk=s.works[w];
+    if(t==="span"){
+      const dateCell=`<span data-sp="${s.id}:${w}:start" style="cursor:pointer; color:var(--text-secondary);">${fmt(wk.start)||'—'}</span><span style="color:var(--text-muted);"> 〜 </span><span data-sp="${s.id}:${w}:end" style="cursor:pointer; color:var(--text-secondary);">${fmt(wk.end)||'—'}</span>`;
+      rows+=`<tr style="border-top:0.5px solid var(--border);">
+        <td style="padding:6px 8px; white-space:nowrap; vertical-align:top;">${dateCell}</td>
+        <td style="padding:6px 8px; vertical-align:top; white-space:nowrap;">${dot(w)}${w}</td>
+        <td style="padding:6px 8px; vertical-align:top; color:var(--text-muted);">—</td>
+        <td style="padding:6px 8px; vertical-align:top;">${vendorSelectHtml(s.id+":"+w+":vendor",wk.vendor)}</td>
+        <td style="padding:6px 8px; text-align:right; vertical-align:top;"><button data-wdel="${s.id}:${w}" style="font-size:11px; padding:2px 8px;">削除</button></td></tr>`;
+    } else if(t==="multi"){
+      const items=wk.items||[];
+      if(items.length){
+        items.forEach((it,ix)=>{
+          rows+=`<tr style="border-top:0.5px solid var(--border);">
+            <td style="padding:6px 8px; white-space:nowrap; vertical-align:top;"><span data-medit="${s.id}:${w}:${ix}:plan" style="cursor:pointer; color:var(--text-secondary);">${fmt(it.plan)||'—'}</span></td>
+            <td style="padding:6px 8px; vertical-align:top; white-space:nowrap;">${dot(w)}${w}</td>
+            <td style="padding:6px 8px; vertical-align:top;"><input type="text" data-mname="${s.id}:${w}:${ix}" value="${(it.name||'').replace(/"/g,'&quot;')}" placeholder="内容（例：給湯器交換）" style="width:auto; min-width:150px; font-size:12px; padding:3px 7px;"></td>
+            <td style="padding:6px 8px; vertical-align:top;">${vendorSelectHtml(s.id+":"+w+":items:"+ix+":vendor",it.vendor)} <button data-mdel="${s.id}:${w}:${ix}" style="font-size:11px; padding:1px 7px;">×</button></td>
+            <td style="padding:6px 8px; text-align:right; vertical-align:top;">${ix===0?`<button data-wdel="${s.id}:${w}" style="font-size:11px; padding:2px 8px;">削除</button>`:''}</td></tr>`;
+        });
+      } else {
+        rows+=`<tr style="border-top:0.5px solid var(--border);"><td style="padding:6px 8px; color:var(--text-muted);">—</td><td style="padding:6px 8px; white-space:nowrap;">${dot(w)}${w}</td><td colspan="2" style="padding:6px 8px; color:var(--text-muted); font-size:12px;">明細なし</td><td style="padding:6px 8px; text-align:right;"><button data-wdel="${s.id}:${w}" style="font-size:11px; padding:2px 8px;">削除</button></td></tr>`;
+      }
+      rows+=`<tr><td></td><td colspan="4" style="padding:2px 8px 6px;"><button data-madd="${s.id}:${w}" style="font-size:11px; padding:2px 9px;"><i class="ti ti-plus" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i> ${w}明細を追加</button></td></tr>`;
+    } else {
+      rows+=`<tr style="border-top:0.5px solid var(--border);">
+        <td style="padding:6px 8px; white-space:nowrap; vertical-align:top;"><span data-sg="${s.id}:${w}:plan" style="cursor:pointer; color:var(--text-secondary);">${fmt(wk.plan)||'—'}</span></td>
+        <td style="padding:6px 8px; vertical-align:top; white-space:nowrap;">${dot(w)}${w}</td>
+        <td style="padding:6px 8px; vertical-align:top; color:var(--text-muted);">—</td>
+        <td style="padding:6px 8px; vertical-align:top;">${vendorSelectHtml(s.id+":"+w+":vendor",wk.vendor)}</td>
+        <td style="padding:6px 8px; text-align:right; vertical-align:top;"><button data-wdel="${s.id}:${w}" style="font-size:11px; padding:2px 8px;">削除</button></td></tr>`;
+      if(w==="クリーニング"){
+        const rf=s.works["リフォーム"];
+        const naiso = rf && rf.end ? fmt(rf.end) : "—";
+        rows+=`<tr><td></td><td colspan="4" style="padding:0 8px 8px;">
+          <div style="padding:7px 10px; border:0.5px dashed var(--border); border-radius:8px; display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; font-size:11px;">
+          <span style="color:var(--text-muted);">内装完了 <b style="color:var(--text-secondary);">${naiso}</b><span style="font-size:9px;">(自動)</span></span>
+          <label style="display:inline-flex; align-items:center; gap:4px;">請求先 ${simpleSelectHtml(`data-site="${s.id}:billTo"`,s.billTo,BILL_OPTS)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">家具 ${simpleSelectHtml(`data-site="${s.id}:furniture"`,s.furniture,FURN_OPTS)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">清掃費 ${moneyInputHtml(`data-fee="${s.id}:cleanFee"`,wk.cleanFee)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">エアコン ${moneyInputHtml(`data-fee="${s.id}:acFee"`,wk.acFee)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">剥離 ${moneyInputHtml(`data-fee="${s.id}:peelFee"`,wk.peelFee)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">オートロック ${presetOrFreeHtml(`${s.id}:autolock`,s.autolock,AUTOLOCK_PRESETS)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">備考 ${presetOrFreeHtml(`${s.id}:note`,s.note,NOTE_PRESETS)}</label>
+          </div></td></tr>`;
+      }
+    }
+  });
+  d.innerHTML=`<div style="background:var(--surface-1); border:0.5px solid var(--border); border-radius:12px; padding:12px 16px;">
+    <div style="font-size:13px; font-weight:500; margin-bottom:10px;">④ 工事手配の内訳 — ${s.name} ${s.room}号室</div>
+    <div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <tr style="color:var(--text-secondary); text-align:left;"><th style="padding:4px 8px; font-weight:400; white-space:nowrap;">日付</th><th style="padding:4px 8px; font-weight:400;">種別</th><th style="padding:4px 8px; font-weight:400;">内容</th><th style="padding:4px 8px; font-weight:400;">業者</th><th></th></tr>
+      ${rows||`<tr><td colspan="5" style="padding:8px; color:var(--text-muted);">内訳なし</td></tr>`}
+    </table></div>
+    <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+      ${WORKS.filter(w=>!(w in s.works)).map(w=>`<button data-wadd="${s.id}:${w}" style="font-size:11px; padding:3px 9px;"><i class="ti ti-plus" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i> ${w}</button>`).join("")}
+    </div></div>`;
+
+  const sid=s.id;
+  d.querySelectorAll("[data-sg]").forEach(el=>el.addEventListener("click",()=>{const [id,w,k]=el.dataset.sg.split(":"); const s2=sites.find(x=>x.id===Number(id)); openDateInline(el,s2.works[w][k],v=>{s2.works[w][k]=v; syncAndRefresh(s2);});}));
+  d.querySelectorAll("[data-sp]").forEach(el=>el.addEventListener("click",()=>{const [id,w,k]=el.dataset.sp.split(":"); const s2=sites.find(x=>x.id===Number(id)); editSpanDate(s2,w,k,el);}));
+  d.querySelectorAll("[data-medit]").forEach(el=>el.addEventListener("click",()=>{const [id,w,ix,k]=el.dataset.medit.split(":"); const s2=sites.find(x=>x.id===Number(id)); openDateInline(el,s2.works[w].items[ix][k],v=>{s2.works[w].items[ix][k]=v; syncAndRefresh(s2);});}));
+  d.querySelectorAll("input[data-mname]").forEach(el=>{ el.addEventListener("input",()=>{ const [id,w,ix]=el.dataset.mname.split(":"); const s2=sites.find(x=>x.id===Number(id)); s2.works[w].items[Number(ix)].name=el.value; }); });
+  d.querySelectorAll("select[data-vsel]").forEach(el=>{
+    el.addEventListener("change",()=>{
+      const path=el.dataset.vsel;
+      if(el.value==="__new__"){ const v=prompt("新規業者名を入力"); if(v&&v.trim()){ const nv=v.trim(); if(!vendorMaster.includes(nv))vendorMaster.push(nv); setByPath(sites.find(x=>x.id===sid).works,path.substring(path.indexOf(":")+1),nv); } refresh(); return; }
+      setByPath(sites.find(x=>x.id===sid).works, path.substring(path.indexOf(":")+1), el.value||null); refresh();
+    });
+  });
+  d.querySelectorAll("[data-madd]").forEach(el=>el.addEventListener("click",()=>{const [id,w]=el.dataset.madd.split(":"); const s2=sites.find(x=>x.id===Number(id)); s2.works[w].items=s2.works[w].items||[]; s2.works[w].items.push({name:"",plan:null,act:null,vendor:DEFAULT_VENDOR[w]||null}); refresh();}));
+  d.querySelectorAll("[data-mdel]").forEach(el=>el.addEventListener("click",()=>{const [id,w,ix]=el.dataset.mdel.split(":"); const s2=sites.find(x=>x.id===Number(id)); s2.works[w].items.splice(Number(ix),1); refresh();}));
+  d.querySelectorAll("[data-wadd]").forEach(el=>el.addEventListener("click",()=>{const [id,w]=el.dataset.wadd.split(":"); const s2=sites.find(x=>x.id===Number(id)); const t=WORKDEF[w].type; const dv=DEFAULT_VENDOR[w]||null; s2.works[w]=t==="span"?{start:null,end:null,act:null,vendor:dv}:t==="multi"?{items:[]}:{plan:null,act:null,vendor:dv}; refresh();}));
+  d.querySelectorAll("[data-wdel]").forEach(el=>el.addEventListener("click",()=>{const [id,w]=el.dataset.wdel.split(":"); const s2=sites.find(x=>x.id===Number(id)); delete s2.works[w]; refresh();}));
+  // 金額（清掃費・エアコン・剥離）: クリーニング工事に保存。入力中は再描画しない
+  d.querySelectorAll("input[data-fee]").forEach(el=>{ el.addEventListener("input",()=>{ const [id,field]=el.dataset.fee.split(":"); const s2=sites.find(x=>x.id===Number(id)); const wk=s2.works["クリーニング"]; if(wk){ const v=el.value.trim(); wk[field]= v===""?null:Number(v); } }); });
+  // 請求先・家具（現場単位、単純プルダウン）
+  d.querySelectorAll("select[data-site]").forEach(el=>{ el.addEventListener("change",()=>{ const [id,field]=el.dataset.site.split(":"); const s2=sites.find(x=>x.id===Number(id)); s2[field]=el.value; }); });
+  // オートロック・備考（プルダウン＋フリー入力）
+  d.querySelectorAll("select[data-preset]").forEach(el=>{ el.addEventListener("change",()=>{
+    const [id,field]=el.dataset.preset.split(":"); const s2=sites.find(x=>x.id===Number(id));
+    const free=d.querySelector(`input[data-free="${id}:${field}"]`);
+    if(el.value==="__free__"){ if(free){ free.style.display=""; s2[field]=free.value.trim(); free.focus(); } }
+    else { if(free) free.style.display="none"; s2[field]=el.value; }
+  }); });
+  d.querySelectorAll("input[data-free]").forEach(el=>{ el.addEventListener("input",()=>{ const [id,field]=el.dataset.free.split(":"); const s2=sites.find(x=>x.id===Number(id)); s2[field]=el.value.trim(); }); });
+}
+
+function daysInPeriod(){
+  if(calView==="week"){
+    let start;
+    if(weekFromToday){ start=new Date(TODAY); }
+    else { const d=new Date(calAnchor); const dow=d.getDay(); start=new Date(d); start.setDate(d.getDate()-dow); }
+    return Array.from({length:7},(_,i)=>{const x=new Date(start); x.setDate(start.getDate()+i); return x;});
+  }
+  const y=calAnchor.getFullYear(), m=calAnchor.getMonth(); const days=new Date(y,m+1,0).getDate();
+  return Array.from({length:days},(_,i)=>new Date(y,m,i+1));
+}
+function sitematch(s){ return calSite==="all"||s.id===Number(calSite); }
+// 現在のカレンダー表示期間内に、表示対象の予定が1件以上ある現場（完了分含む）を返す。
+// 工事フィルタ・業者フィルタは考慮するが、現場フィルタ自体は無視（選択肢生成用）。
+function sitesInView(){
+  const days=daysInPeriod();
+  const first=iso(days[0].getFullYear(),days[0].getMonth(),days[0].getDate());
+  const last=iso(days[days.length-1].getFullYear(),days[days.length-1].getMonth(),days[days.length-1].getDate());
+  const inRange=(a,b)=>{ if(!a)return false; const bb=b||a; return a<=last && bb>=first; };
+  const vAll = calVendor==="all";
+  const wantWork=(w)=> calWork==="all"||calWork===w;
+  const wantMtg = calWork==="all"||calWork===EXTRA_MTG.key;
+  const wantMovein = calWork==="all"||calWork===EXTRA_MOVEIN.key;
+  const wantKey = calWork==="all"||calWork===EXTRA_KEY.key;
+  const out=[];
+  sites.forEach(s=>{
+    let hit=false;
+    // 工事
+    Object.keys(s.works).forEach(w=>{ if(hit||!wantWork(w))return; const t=WORKDEF[w].type, wk=s.works[w];
+      if(t==="span"){ if((vAll||wk.vendor===calVendor)&&inRange(wk.start,wk.end)) hit=true; }
+      else if(t==="single"){ if((vAll||wk.vendor===calVendor)&&inRange(wk.plan,null)) hit=true; }
+      else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if((vAll||it.vendor===calVendor)&&inRange(it.plan,null)) hit=true; }); }
+    });
+    // 立会・入居前清掃・鍵交換（業者フィルタ時は対象外）
+    if(!hit && vAll){
+      if(wantMtg && inRange(s.act[0],null)) hit=true;
+      else if(wantMovein && inRange(s.moveinClean.done,null)) hit=true;
+      else if(wantKey && inRange(s.keyChange.done,null)) hit=true;
+    }
+    if(hit) out.push(s);
+  });
+  return out;
+}
+function collectSpans(){
+  const vmatch=(v)=> calVendor==="all"||v===calVendor, wmatch=(w)=> calWork==="all"||w===calWork;
+  let e=[];
+  sites.forEach(s=>{ if(!sitematch(s))return; Object.keys(s.works).forEach(w=>{ if(!wmatch(w))return; if(WORKDEF[w].type!=="span")return; const wk=s.works[w]; if(wk.start&&wk.end&&vmatch(wk.vendor)) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act});});});
+  return e;
+}
+function singlesOnDay(key){
+  const vmatch=(v)=> calVendor==="all"||v===calVendor, wmatch=(w)=> calWork==="all"||w===calWork;
+  let out=[];
+  sites.forEach(s=>{ if(!sitematch(s))return; Object.keys(s.works).forEach(w=>{ if(!wmatch(w))return; const t=WORKDEF[w].type, wk=s.works[w];
+    if(t==="multi"){ (wk.items||[]).forEach((it,ix)=>{ if(it.plan===key&&vmatch(it.vendor)) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act,ref:{kind:"multi",id:s.id,w,ix}}); }); }
+    else if(t==="single"){ if(wk.plan===key&&vmatch(wk.vendor)) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act,ref:{kind:"single",id:s.id,w}}); }
+  });});
+  return out;
+}
+// 入居前清掃・鍵交換の「実施日」をカレンダー表示（業者フィルタ対象外、工事フィルタは専用値で連動）。ドラッグ不可の表示チップ。
+function extraChipsOnDay(key){
+  let out=[];
+  const wantAll = calWork==="all";
+  sites.forEach(s=>{ if(!sitematch(s))return;
+    if((wantAll||calWork===EXTRA_MTG.key) && s.act[0]===key) out.push({kind:"mtg",site:s,color:EXTRA_MTG.color,abbr:EXTRA_MTG.abbr,time:s.mtgTime});
+    if((wantAll||calWork===EXTRA_MOVEIN.key) && s.moveinClean.done===key) out.push({kind:"movein",site:s,color:EXTRA_MOVEIN.color,abbr:EXTRA_MOVEIN.abbr});
+    if((wantAll||calWork===EXTRA_KEY.key) && s.keyChange.done===key) out.push({kind:"key",site:s,color:EXTRA_KEY.color,abbr:EXTRA_KEY.abbr});
+  });
+  // 1現場に絞ったとき（かつ工事フィルタ=すべて）は、②③⑤⑥の工程日も工程名付きで表示（実績優先、なければ予定）
+  if(calSite!=="all" && calVendor==="all" && wantAll){
+    const s=sites.find(x=>String(x.id)===String(calSite));
+    if(s){ [1,2,4,5].forEach(i=>{ if(!isPhaseActive(s,i))return; const dt=s.act[i]||s.plan[i]; if(dt===key){ out.push({kind:"phase",site:s,phaseIdx:i,color:PHASE_MILESTONE_COLOR,abbr:PHASES[i].slice(1)}); } }); }
+  }
+  // 業者フィルタが特定業者のときは工事に業者が無いこれらは出さない
+  if(calVendor!=="all") return [];
+  return out;
+}
+function extraChipLabel(e){ const t=e.time?` ${e.time}`:''; return calSite!=="all" ? `[${e.abbr}]${t}` : `[${e.abbr}]${siteLabel(e.site)}${t}`; }
+function siteLabel(s){ return `${s.name} ${s.room}`; }
+function labelText(e){
+  if(calSite!=="all"){ const v=e.vendor?` /${e.vendor}`:""; const nm=e.name?e.name:""; return `[${WORKABBR[e.work]}]${nm}${v}`; }
+  if(calWork==="all"){ const v=e.vendor?` /${e.vendor}`:""; const nm=e.name?`·${e.name}`:""; return `[${WORKABBR[e.work]}]${siteLabel(e.site)}${nm}${v}`; }
+  const v=e.vendor?` /${e.vendor}`:""; const nm=e.name?`·${e.name}`:""; return `${siteLabel(e.site)}${nm}${v}`;
+}
+
+const ROW=18, GAP=2;
+function renderLegend(){
+  const lg=document.getElementById("legend");
+  const colorOf=(w)=> w===EXTRA_MTG.key    ? {bg:EXTRA_MTG.color.done,fg:EXTRA_MTG.color.fg}
+                    : w===EXTRA_MOVEIN.key ? {bg:EXTRA_MOVEIN.color.done,fg:EXTRA_MOVEIN.color.fg}
+                    : w===EXTRA_KEY.key    ? {bg:EXTRA_KEY.color.done,fg:EXTRA_KEY.color.fg}
+                    : WORKCOLOR[w];
+  const shown = calWork==="all" ? WORKS : [calWork];
+  lg.innerHTML=shown.map(w=>{const c=colorOf(w); if(!c) return ""; return `<span style="font-size:11px; display:inline-flex; align-items:center; gap:4px;"><span style="width:12px; height:12px; border-radius:3px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("");
+}
+
+function dayKeyAtPoint(x,y){
+  const els=document.elementsFromPoint(x,y);
+  for(const el of els){ if(el.dataset&&el.dataset.day) return el.dataset.day; const c=el.closest&&el.closest("[data-day]"); if(c) return c.dataset.day; }
+  return null;
+}
+
+let DND=null;
+function startDrag(el, e, payload){
+  DND={payload, moved:false, startX:e.clientX, startY:e.clientY, ghost:null, el, pid:e.pointerId};
+  try{ if(e.pointerId!=null && el.setPointerCapture) el.setPointerCapture(e.pointerId); }catch(_){}
+  const move=(ev)=>{
+    const dx=Math.abs(ev.clientX-DND.startX), dy=Math.abs(ev.clientY-DND.startY);
+    if(!DND.moved && dx+dy<5) return;
+    DND.moved=true;
+    if(ev.cancelable) ev.preventDefault();
+    if(!DND.ghost){ const g=document.createElement("div"); g.textContent=payload.label; g.style.cssText=`position:fixed; z-index:9999; pointer-events:none; font-size:10px; padding:2px 6px; border-radius:5px; background:${payload.bg}; color:${payload.fg}; box-shadow:0 2px 8px rgba(0,0,0,.2); opacity:.9;`; document.body.appendChild(g); DND.ghost=g; }
+    DND.ghost.style.left=(ev.clientX+8)+"px"; DND.ghost.style.top=(ev.clientY+8)+"px";
+    document.querySelectorAll(".daycell").forEach(c=>c.style.outline="none");
+    const key=dayKeyAtPoint(ev.clientX,ev.clientY);
+    if(key){ const cell=document.querySelector(`.daycell[data-day="${key}"]`); if(cell){cell.style.outline="2px solid var(--border-accent)"; cell.style.outlineOffset="-2px";} }
+    const uz=document.getElementById("unassigned");
+    if(uz){ uz.style.outline = overUnassigned(ev.clientX,ev.clientY) ? "2px dashed var(--text-danger)" : "none"; }
+  };
+  const up=(ev)=>{
+    el.removeEventListener("pointermove",move); el.removeEventListener("pointerup",up); el.removeEventListener("pointercancel",up);
+    try{ if(DND.pid!=null && el.releasePointerCapture) el.releasePointerCapture(DND.pid); }catch(_){}
+    document.querySelectorAll(".daycell").forEach(c=>c.style.outline="none");
+    const uz=document.getElementById("unassigned"); if(uz) uz.style.outline="none";
+    if(DND.ghost) DND.ghost.remove();
+    if(DND.moved){
+      if(overUnassigned(ev.clientX,ev.clientY)){ unassignPayload(payload); }
+      else { const key=dayKeyAtPoint(ev.clientX,ev.clientY); if(key) applyDrop(payload,key); }
+    }
+    else if(payload.onClick){ payload.onClick(); }
+    DND=null;
+  };
+  el.addEventListener("pointermove",move);
+  el.addEventListener("pointerup",up);
+  el.addEventListener("pointercancel",up);
+}
+function overUnassigned(x,y){
+  const uz=document.getElementById("unassigned"); if(!uz) return false;
+  const r=uz.getBoundingClientRect();
+  return x>=r.left && x<=r.right && y>=r.top && y<=r.bottom;
+}
+// カレンダー上の予定を未手配（日付なし）に戻す
+function unassignPayload(payload){
+  if(payload.type==="span"){ const s=sites.find(x=>x.id===payload.id); const wk=s.works[payload.w]; wk.start=null; wk.end=null; syncAndRefresh(s); }
+  else if(payload.type==="chip"){ const r=payload.ref; const s=sites.find(x=>x.id===r.id); if(r.kind==="single")s.works[r.w].plan=null; else s.works[r.w].items[r.ix].plan=null; syncAndRefresh(s); }
+  else if(payload.type==="extra"){ const s=sites.find(x=>x.id===payload.id); s[payload.field].done=null; refresh(); }
+  else if(payload.type==="mtg"){ const s=sites.find(x=>x.id===payload.id); s.act[0]=null; refresh(); }
+  // type==="new" は元々未手配なので何もしない
+}
+function applyDrop(payload,key){
+  if(payload.type==="span"){ const s=sites.find(x=>x.id===payload.id); const wk=s.works[payload.w]; const len=dateDiff(wk.start,wk.end); wk.start=key; wk.end=dateAdd(key,len); syncAndRefresh(s); }
+  else if(payload.type==="chip"){ const r=payload.ref; const s=sites.find(x=>x.id===r.id); if(r.kind==="single")s.works[r.w].plan=key; else s.works[r.w].items[r.ix].plan=key; syncAndRefresh(s); }
+  else if(payload.type==="new"){ const s=sites.find(x=>x.id===payload.id); const wk=s.works[payload.w];
+    if(WORKDEF[payload.w].type==="span"){ wk.start=key; wk.end=key; } else if(WORKDEF[payload.w].type==="multi"){ if(payload.ix!=null&&wk.items&&wk.items[payload.ix]) wk.items[payload.ix].plan=key; } else { wk.plan=key; } syncAndRefresh(s); }
+  else if(payload.type==="extra"){ const s=sites.find(x=>x.id===payload.id);
+    if(payload.field==="keyChange" && s.plan[3] && key<=s.plan[3]){ alert(`鍵交換の実施日は、④工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return; }
+    s[payload.field].done=key; refresh(); }
+  else if(payload.type==="mtg"){ const s=sites.find(x=>x.id===payload.id); s.act[0]=key; refresh(); }
+  else if(payload.type==="phase"){ const s=sites.find(x=>x.id===payload.id); const i=payload.phaseIdx; if(payload.useAct) s.act[i]=key; else s.plan[i]=key; refresh(); }
+}
+
+function renderCalendar(){
+  const sitesel=document.getElementById("sitesel");
+  const inView=sitesInView();
+  // 選択中の現場が表示対象外でも選択肢には残す（表示が空になっても選択状態を保持）
+  let optSites=inView.slice();
+  if(calSite!=="all" && !optSites.some(s=>String(s.id)===String(calSite))){ const cur=sites.find(s=>String(s.id)===String(calSite)); if(cur) optSites.unshift(cur); }
+  sitesel.innerHTML=`<option value="all">すべての現場</option>`+optSites.map(s=>`<option value="${s.id}"${String(calSite)===String(s.id)?' selected':''}>${s.name} ${s.room}号室</option>`).join("");
+  const sel=document.getElementById("worksel");
+  if(!sel.dataset.init){sel.innerHTML=`<option value="all">すべての工事</option>`+WORKS.map(w=>`<option value="${w}"${w===calWork?' selected':''}>${w}</option>`).join("")+`<option value="${EXTRA_MTG.key}"${calWork===EXTRA_MTG.key?' selected':''}>${EXTRA_MTG.key}</option><option value="${EXTRA_MOVEIN.key}"${calWork===EXTRA_MOVEIN.key?' selected':''}>${EXTRA_MOVEIN.key}</option><option value="${EXTRA_KEY.key}"${calWork===EXTRA_KEY.key?' selected':''}>${EXTRA_KEY.key}</option>`; sel.dataset.init="1";}
+  const vsel=document.getElementById("vendorsel");
+  const vlist=allVendorsInUse();
+  if(calVendor!=="all"&&!vlist.includes(calVendor)) calVendor="all";
+  vsel.innerHTML=`<option value="all">全業者</option>`+vlist.map(v=>`<option value="${v}"${v===calVendor?' selected':''}>${v}</option>`).join("");
+  renderLegend();
+
+  const isExtraFilter = (calWork===EXTRA_MTG.key||calWork===EXTRA_MOVEIN.key||calWork===EXTRA_KEY.key);
+  document.getElementById("calhint").textContent = calWork==="all"
+    ? "色＝工事種別（凡例）。濃い色＝完了済み。帯・チップはドラッグで移動、クリックで日付編集。下の未手配をカレンダーへドラッグで割当。"
+    : isExtraFilter ? "入居前清掃・鍵交換の実施日を表示（管理表で編集）。"
+    : (WORKDEF[calWork].type==="multi" ? "複数明細の工事。ドラッグ移動・クリック編集可。新規追加は④内訳から。"
+    : "帯・チップはドラッグで移動、クリックで編集。下の未手配をカレンダーへドラッグで割当。");
+
+  const days=daysInPeriod();
+  const y=calAnchor.getFullYear(), m=calAnchor.getMonth();
+  if(calView==="week"){ const a=days[0],b=days[6]; document.getElementById("perlabel").textContent=`${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
+  else document.getElementById("perlabel").textContent=`${y}年${m+1}月`;
+
+  let spans=collectSpans();
+  spans.sort((a,b)=>a.start.localeCompare(b.start));
+  const slotEnds=[]; spans.forEach(e=>{let sl=0; while(sl<slotEnds.length&&slotEnds[sl]>=e.start)sl++; e.slot=sl; slotEnds[sl]=e.end;});
+
+  const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
+  const tKey=todayKey();
+  let weeks=[];
+  if(calView==="week") weeks=[days];
+  else { const firstDow=days[0].getDay(); let row=new Array(firstDow).fill(null); days.forEach(dt=>{row.push(dt); if(row.length===7){weeks.push(row); row=[];}}); if(row.length){while(row.length<7)row.push(null); weeks.push(row);} }
+
+  const wd=["日","月","火","水","木","金","土"];
+  let headRow;
+  if(calView==="week"){
+    headRow=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px;">`+days.map(dt=>`<div style="text-align:center; font-size:11px; color:${dt.getDay()===0?'var(--text-danger)':dt.getDay()===6?'var(--text-accent)':'var(--text-secondary)'};">${wd[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}</div>`).join("")+`</div>`;
+  } else {
+    headRow=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px;">`+wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
+  }
+
+  let weeksHtml="";
+  weeks.forEach(week=>{
+    let usedSpanSlots=0;
+    week.forEach(dt=>{ if(!dt)return; const k=keyOf(dt); spans.forEach(e=>{ if(k>=e.start&&k<=e.end) usedSpanSlots=Math.max(usedSpanSlots,e.slot+1); }); });
+    const spanAreaH=usedSpanSlots*(ROW+GAP);
+    const topPad=26, cellMinH=(calView==="week"?120:74);
+
+    let cellsHtml=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; position:relative;">`;
+    week.forEach(dt=>{
+      if(!dt){ cellsHtml+=`<div></div>`; return; }
+      const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey);
+      const hol=holidayName(k);
+      const singles=singlesOnDay(k);
+      const chips=singles.map((e,i)=>`<div class="chip" data-chipkey="${k}__${i}" title="${labelText(e)}" style="cursor:grab; touch-action:none; ${`background:${e.done?WORKCOLOR[e.work].done:WORKCOLOR[e.work].bg}; color:${WORKCOLOR[e.work].fg};`} font-size:10px; line-height:1.25; padding:2px 5px; margin-top:2px; border-radius:5px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`).join("");
+      const extras=extraChipsOnDay(k);
+      const extraChips=extras.map((e,i)=>`<div class="xchip" data-xchipkey="${k}__${i}" title="${extraChipLabel(e)}（実施）" style="cursor:grab; touch-action:none; background:${e.color.done}; color:#fff; font-size:10px; line-height:1.25; padding:2px 5px; margin-top:2px; border-radius:5px; white-space:normal; word-break:break-word; border:1px solid ${e.color.fg};">${extraChipLabel(e)}</div>`).join("");
+      const dnumColor = isToday?'var(--text-accent)':(hol?'var(--text-danger)':(dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-secondary)'));
+      const cellBg = isToday?'var(--bg-accent-muted)':(hol?'#f8d7d7':'var(--surface-2)');
+      const holLabel = hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
+      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
+        <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getDate()}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
+        <div style="height:${spanAreaH}px;"></div>${chips}${extraChips}</div>`;
+    });
+    cellsHtml+=`</div>`;
+
+    const colW=100/7;
+    let overlay=`<div style="position:absolute; inset:0; pointer-events:none;">`;
+    spans.forEach((e)=>{
+      const weekKeys=week.map(dt=>dt?keyOf(dt):null);
+      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}}
+      if(fc<0) return;
+      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+e.slot*(ROW+GAP);
+      const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
+      const c=WORKCOLOR[e.work], bg=e.done?c.done:c.bg, fg=c.fg;
+      const radius=`${startsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${startsHere?'6px':'2px'}`;
+      overlay+=`<div class="span" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500;">${labelText(e)}</div>`;
+    });
+    overlay+=`</div>`;
+    weeksHtml+=`<div style="position:relative; margin-bottom:4px;">${cellsHtml}${overlay}</div>`;
+  });
+
+  const grid=document.getElementById("calgrid");
+  grid.innerHTML=headRow+weeksHtml;
+
+  grid.querySelectorAll(".span").forEach(el=>{
+    const [id,w]=el.dataset.spankey.split("__");
+    const s=sites.find(x=>x.id===Number(id)); const wk=s.works[w]; const c=WORKCOLOR[w];
+    el.addEventListener("pointerdown",(e)=>{ e.preventDefault(); e.stopPropagation(); startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>openSpanEditor(s,w)}); });
+  });
+  grid.querySelectorAll(".chip").forEach(el=>{
+    const [k,idx]=el.dataset.chipkey.split("__");
+    const list=singlesOnDay(k); const e=list[Number(idx)]; if(!e) return; const c=WORKCOLOR[e.work];
+    el.addEventListener("pointerdown",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); }}); });
+  });
+  grid.querySelectorAll(".xchip").forEach(el=>{
+    const [k,idx]=el.dataset.xchipkey.split("__");
+    const list=extraChipsOnDay(k); const e=list[Number(idx)]; if(!e) return;
+    if(e.kind==="mtg"){
+      el.addEventListener("pointerdown",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); startDrag(el,ev,{type:"mtg",id:e.site.id,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
+        const s=sites.find(x=>x.id===e.site.id);
+        openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{ s.act[0]=dv; s.mtgTime=tv; refresh(); });
+      }}); });
+      return;
+    }
+    if(e.kind==="phase"){
+      // ②③⑤⑥：ドラッグで日付移動、クリックで編集。実績があれば実績を、なければ予定を動かす
+      const usesAct = !!e.site.act[e.phaseIdx];
+      el.addEventListener("pointerdown",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); startDrag(el,ev,{type:"phase",id:e.site.id,phaseIdx:e.phaseIdx,useAct:usesAct,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
+        const s=sites.find(x=>x.id===e.site.id); const i=e.phaseIdx;
+        if(s.act[i]) openDateInline(el,s.act[i],v=>{ s.act[i]=v; refresh(); });
+        else openDateInline(el,s.plan[i],v=>{ s.plan[i]=v; refresh(); });
+      }}); });
+      return;
+    }
+    const field = e.kind==="movein" ? "moveinClean" : "keyChange";
+    el.addEventListener("pointerdown",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); startDrag(el,ev,{type:"extra",id:e.site.id,field,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
+      const s=sites.find(x=>x.id===e.site.id);
+      let opts={}; if(field==="keyChange"&&s.plan[3]) opts.min=dateAdd(s.plan[3],1);
+      openDateInline(el,s[field].done,v=>{ if(field==="keyChange"&&v&&s.plan[3]&&v<=s.plan[3]){ alert(`鍵交換の実施日は、④工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return; } s[field].done=v; refresh(); }, opts);
+    }}); });
+  });
+
+  renderUnassigned();
+}
+
+function renderUnassigned(){
+  const ua=document.getElementById("unassigned");
+  const vmatch=(v)=>calVendor==="all"||v===calVendor;
+  // 入居前清掃・鍵交換は工事(WORKDEF)ではないため未手配リストの対象外
+  const isExtra = (calWork===EXTRA_MTG.key||calWork===EXTRA_MOVEIN.key||calWork===EXTRA_KEY.key);
+  if(isExtra){ ua.innerHTML=`<div style="font-size:12px; color:var(--text-muted);">${calWork}の実施日は工事進捗管理表で入力します（発注・実施）。</div>`; return; }
+  const worksToScan = calWork==="all" ? WORKS.slice() : [calWork];
+  let list=[];
+  worksToScan.forEach(w=>{
+    sites.forEach(s=>{ if(!sitematch(s))return; const wk=s.works[w]; if(!wk)return;
+      if(WORKDEF[w].type==="multi"){
+        (wk.items||[]).forEach((it,ix)=>{ if(!it.plan && vmatch(it.vendor)) list.push({s,w,ix,name:it.name}); });
+      } else {
+        const un = WORKDEF[w].type==="span" ? (!wk.start||!wk.end) : !wk.plan;
+        if(un && vmatch(wk.vendor)) list.push({s,w,ix:null});
+      }
+    });
+  });
+  if(list.length===0){ ua.innerHTML=`<div style="font-size:12px; color:var(--text-muted);">未手配の工事はありません。</div>`; return; }
+  ua.innerHTML=`<div style="font-size:12px; font-weight:500; margin-bottom:6px;">未手配（カレンダーへドラッグ、またはクリック→日付クリックで割当）</div>
+    <div id="unassignedbtns" style="display:flex; gap:6px; flex-wrap:wrap;">${list.map((it,i)=>{const c=WORKCOLOR[it.w]; const nm=(it.ix!=null&&it.name)?`（${it.name}）`:""; return `<div class="pill" data-pi="${i}" style="cursor:grab; touch-action:none; font-size:12px; padding:5px 11px; border-radius:var(--radius); border:0.5px solid ${c.fg}; background:${c.bg}; color:${c.fg};">[${WORKABBR[it.w]}]${it.s.name} ${it.s.room}${nm}</div>`;}).join("")}</div>`;
+  ua.querySelectorAll("[data-pi]").forEach(el=>{
+    const it=list[Number(el.dataset.pi)]; const c=WORKCOLOR[it.w];
+    const nm=(it.ix!=null&&it.name)?`（${it.name}）`:"";
+    el.addEventListener("pointerdown",(e)=>{ e.preventDefault(); startDrag(el,e,{type:"new",id:it.s.id,w:it.w,ix:it.ix,label:`[${WORKABBR[it.w]}]${it.s.name} ${it.s.room}${nm}`,bg:c.bg,fg:c.fg,onClick:()=>selectPick(it.s.id,it.w,it.ix)}); });
+  });
+}
+let pickedSite=null, pickedWork=null, pickedIx=null, spanStart=null;
+function selectPick(id,w,ix){
+  ix = (ix==null?null:ix);
+  const same = (pickedSite===id && pickedWork===w && pickedIx===ix);
+  pickedSite = same?null:id; pickedWork = same?null:w; pickedIx = same?null:ix; spanStart=null;
+  if(pickedSite){
+    document.querySelectorAll(".daycell").forEach(c=>{
+      c.onclick = ()=>{ if(pickedSite==null) return; const key=c.dataset.day; const s=sites.find(x=>x.id===pickedSite); const wk=s.works[pickedWork];
+        if(WORKDEF[pickedWork].type==="span"){ if(!spanStart){ spanStart=key; hintPick(`開始 ${fmt(key)} 選択 → 完了日をクリック`); } else { let a=spanStart,b=key; if(a>b){const t=a;a=b;b=t;} wk.start=a; wk.end=b; spanStart=null; pickedSite=null; pickedWork=null; pickedIx=null; syncAndRefresh(s); } }
+        else if(WORKDEF[pickedWork].type==="multi"){ if(pickedIx!=null&&wk.items&&wk.items[pickedIx]) wk.items[pickedIx].plan=key; pickedSite=null; pickedWork=null; pickedIx=null; syncAndRefresh(s); }
+        else { wk.plan=key; pickedSite=null; pickedWork=null; pickedIx=null; syncAndRefresh(s); } };
+    });
+    hintPick(WORKDEF[pickedWork].type==="span"?"カレンダーで開始日をクリック":"カレンダーで予定日をクリック");
+  }
+}
+function hintPick(msg){ const h=document.getElementById("calhint"); if(msg) h.textContent=msg; }
+
+function openSpanEditor(s,w){
+  const wk=s.works[w];
+  const wrap=document.getElementById("spanpop");
+  document.getElementById("spantitle").textContent=`${w} — ${s.name} ${s.room}号室`;
+  document.getElementById("spanstart").innerHTML=`開始：<b>${fmt(wk.start)||'—'}</b>`;
+  document.getElementById("spanend").innerHTML=`完了予定：<b>${fmt(wk.end)||'—'}</b>`;
+  document.getElementById("spanact").innerHTML=`実績：<b>${fmt(wk.act)||'未'}</b>`;
+  document.getElementById("spanvendor").textContent=wk.vendor||"未設定";
+  wrap.style.display="block";
+  document.getElementById("spanstartbtn").onclick=(ev)=>editSpanDate(s,w,"start",ev.currentTarget,()=>openSpanEditor(s,w));
+  document.getElementById("spanendbtn").onclick=(ev)=>editSpanDate(s,w,"end",ev.currentTarget,()=>openSpanEditor(s,w));
+  document.getElementById("spanactbtn").onclick=(ev)=>openDateInline(ev.currentTarget,wk.act,v=>{wk.act=v; syncAndRefresh(s); openSpanEditor(s,w);});
+  document.getElementById("spanvendorbtn").onclick=()=>{
+    const cur=wk.vendor||""; const v=prompt("業者名（空欄で未設定）\n登録済み: "+vendorMaster.join(" / "), cur);
+    if(v!==null){ const nv=v.trim(); wk.vendor=nv||null; if(nv&&!vendorMaster.includes(nv))vendorMaster.push(nv); refresh(); openSpanEditor(s,w); }
+  };
+  document.getElementById("spanclose").onclick=()=>{wrap.style.display="none";};
+}
+
+// 日付部分クリックでその場にカレンダーを開き、日付選択で即反映（確定ボタンなし）
+function openDateInline(anchorEl,cur,cb,opts){
+  opts=opts||{};
+  const old=document.getElementById("inlinedate"); if(old) old.remove();
+  const inp=document.createElement("input");
+  inp.type="date"; inp.id="inlinedate"; inp.value=cur||"";
+  if(opts.min) inp.min=opts.min;
+  if(opts.max) inp.max=opts.max;
+  inp.style.cssText="position:fixed; z-index:10000; width:150px; box-sizing:border-box; font-size:13px; padding:3px 6px; border:1px solid var(--border-strong); border-radius:6px; background:var(--surface-2);";
+  document.body.appendChild(inp);
+  const r=anchorEl.getBoundingClientRect();
+  const w=170, h=36;
+  let left=r.left, top=r.bottom+4;
+  if(left+w>window.innerWidth-6) left=window.innerWidth-6-w;
+  if(left<6) left=6;
+  if(top+h>window.innerHeight-6) top=r.top-h-4;
+  inp.style.left=left+"px"; inp.style.top=Math.max(6,top)+"px";
+  let done=false;
+  const finish=(val)=>{ if(done)return; done=true; inp.remove(); cb(val); };
+  inp.addEventListener("change",()=>finish(inp.value||null));
+  inp.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ done=true; inp.remove(); } });
+  inp.addEventListener("blur",()=>{ setTimeout(()=>{ if(!done){ done=true; inp.remove(); } },200); });
+  requestAnimationFrame(()=>{ try{ if(inp.showPicker) inp.showPicker(); }catch(_){}; inp.focus(); });
+}
+// 時刻(hh:mm)をその場で入力
+// 立会の時刻プリセット：8〜19時、分は00/15/30/45
+const MTG_HOURS=[8,9,10,11,12,13,14,15,16,17,18,19];
+const MTG_MINUTES=["00","15","30","45"];
+function timeOptionsHtml(cur){
+  const [ch,cm]=(cur||"").split(":");
+  let h=`<select id="dth" style="font-size:13px; padding:3px 4px;"><option value="">--</option>`+
+    MTG_HOURS.map(x=>{const v=String(x).padStart(2,"0"); return `<option value="${v}"${v===ch?' selected':''}>${v}</option>`;}).join("")+`</select>`;
+  let m=`<select id="dtm" style="font-size:13px; padding:3px 4px;"><option value="">--</option>`+
+    MTG_MINUTES.map(v=>`<option value="${v}"${v===cm?' selected':''}>${v}</option>`).join("")+`</select>`;
+  return `${h}<span style="align-self:center;">:</span>${m}`;
+}
+// 日付と時刻を同時に編集する小ポップアップ（退去立会用。時刻はプリセット選択）
+function openDateTimeInline(anchorEl,curDate,curTime,cb){
+  const old=document.getElementById("inlinedt"); if(old) old.remove();
+  const box=document.createElement("div");
+  box.id="inlinedt";
+  box.style.cssText="position:fixed; z-index:10000; display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); box-shadow:0 4px 14px rgba(0,0,0,.15);";
+  box.innerHTML=`<label style="font-size:11px; color:var(--text-secondary);">日付<br><input type="date" id="dtd" value="${curDate||''}" style="width:160px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;"></label>
+    <div style="font-size:11px; color:var(--text-secondary);">時刻<br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtml(curTime)}</div></div>
+    <div style="display:flex; gap:6px; justify-content:flex-end;"><button id="dtok" style="font-size:12px; padding:3px 12px;">確定</button></div>`;
+  document.body.appendChild(box);
+  const r=anchorEl.getBoundingClientRect();
+  let left=r.left, top=r.bottom+4;
+  if(left+200>window.innerWidth-6) left=window.innerWidth-6-200;
+  if(left<6) left=6;
+  if(top+150>window.innerHeight-6) top=Math.max(6, r.top-150);
+  box.style.left=left+"px"; box.style.top=top+"px";
+  let done=false;
+  const finish=()=>{ if(done)return; done=true; const dv=box.querySelector("#dtd").value||null; const hh=box.querySelector("#dth").value, mm=box.querySelector("#dtm").value; const tv=(hh&&mm)?`${hh}:${mm}`:null; box.remove(); document.removeEventListener("pointerdown",outside,true); cb(dv,tv); };
+  const cancel=()=>{ if(done)return; done=true; box.remove(); document.removeEventListener("pointerdown",outside,true); };
+  const outside=(e)=>{ if(!box.contains(e.target)) finish(); };
+  box.querySelector("#dtok").addEventListener("click",finish);
+  box.addEventListener("keydown",(e)=>{ if(e.key==="Escape")cancel(); if(e.key==="Enter")finish(); });
+  setTimeout(()=>document.addEventListener("pointerdown",outside,true),0);
+  requestAnimationFrame(()=>box.querySelector("#dtd").focus());
+}
+function openTimeInline(anchorEl,cur,cb){
+  const old=document.getElementById("inlinetime"); if(old) old.remove();
+  const inp=document.createElement("input");
+  inp.type="time"; inp.id="inlinetime"; inp.value=cur||"";
+  inp.style.cssText="position:fixed; z-index:10000; width:130px; box-sizing:border-box; font-size:13px; padding:3px 6px; border:1px solid var(--border-strong); border-radius:6px; background:var(--surface-2);";
+  document.body.appendChild(inp);
+  const r=anchorEl.getBoundingClientRect();
+  let left=r.left, top=r.bottom+4;
+  if(left+140>window.innerWidth-6) left=window.innerWidth-6-140;
+  if(left<6) left=6;
+  inp.style.left=left+"px"; inp.style.top=Math.max(6,top)+"px";
+  let done=false;
+  const finish=(val)=>{ if(done)return; done=true; inp.remove(); cb(val||null); };
+  inp.addEventListener("change",()=>finish(inp.value));
+  inp.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ done=true; inp.remove(); } });
+  inp.addEventListener("blur",()=>{ setTimeout(()=>{ if(!done){ done=true; inp.remove(); } },200); });
+  requestAnimationFrame(()=>{ try{ if(inp.showPicker) inp.showPicker(); }catch(_){}; inp.focus(); });
+}
+// 期間工事の開始/終了を即反映。終了日は開始日より前に設定できない（開始日変更で終了日が前になる場合は開始日に揃える）
+function editSpanDate(s,w,field,anchorEl,after){
+  const wk=s.works[w];
+  const opts={};
+  if(field==="end" && wk.start) opts.min=wk.start;
+  openDateInline(anchorEl, wk[field], (v)=>{
+    if(field==="end" && v && wk.start && v<wk.start){ v=wk.start; }
+    wk[field]=v;
+    if(field==="start"){ if(wk.start && wk.end && wk.end<wk.start) wk.end=wk.start; }
+    syncAndRefresh(s);
+    if(after) after();
+  }, opts);
+}
+// その現場の最終工事日（span終了/single予定/multi明細予定 の最大）
+function latestWorkDate(s){
+  let ds=[];
+  Object.keys(s.works).forEach(w=>{ const t=WORKDEF[w].type, wk=s.works[w];
+    if(t==="span"){ if(wk.end) ds.push(wk.end); else if(wk.start) ds.push(wk.start); }
+    else if(t==="single"){ if(wk.plan) ds.push(wk.plan); }
+    else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.plan) ds.push(it.plan); }); }
+  });
+  if(!ds.length) return null;
+  ds.sort(); return ds[ds.length-1];
+}
+// ④予定(plan[3])を最終工事日に自動同期
+function syncPhase5(s){ const d=latestWorkDate(s); if(d) s.plan[3]=d; }
+function syncAllPhase5(){ sites.forEach(syncPhase5); }
+// ⑤完了チェック(実績)が④最終工事日より前か（警告色の判定に使用）
+function phase6IsPast(s){
+  const last=s.plan[3]; if(!last) return false;
+  if(s.act[4] && s.act[4]<last) return true;
+  return false;
+}
+// 工事日を変更したら⑤を再同期して再描画（⑥が過去なら描画側でセルを警告色にする）
+function syncAndRefresh(s){ syncPhase5(s); refresh(); }
+
+// ===== データ保存・読込レイヤー（方式A：Googleスプレッドシート実接続） =====
+// 保存形式：複雑な部分(works等)を含む現場データをJSONにまとめ、Apps Script経由で
+// スプレッドシートのセルに読み書きする。URLは設定欄に貼る（下のGAS_URL）。
+const SCHEMA_VERSION=1;
+let GAS_URL=""; // Apps ScriptのウェブアプリURL（設定欄で入力）
+let GAS_TOKEN=""; // 合言葉（Apps Script側のTOKENと一致させる）
+let lastUpdatedAt=""; // シート側の最終更新時刻（競合検知用）
+let autoSaveTimer=null;
+let saving=false, pendingSave=false;
+let dirty=false; // 未保存のローカル変更がある間はtrue（自動取込を止める）
+
+function serializeData(){
+  return JSON.stringify({ v:SCHEMA_VERSION, savedAt:new Date().toISOString(), nextId, vendorMaster, buildingMaster, sites });
+}
+function normalizeSite(raw){
+  const s=Object.assign(newSite(raw.id,raw.name,raw.room,raw.category), raw, {open:false});
+  // 配列長・型の防御（古いデータや欠損対策）
+  const fix6=a=>{const r=Array.isArray(a)?a.slice(0,6):[]; while(r.length<6)r.push(null); return r;};
+  s.plan=fix6(s.plan); s.act=fix6(s.act);
+  if(!s.works||typeof s.works!=="object") s.works={};
+  Object.keys(s.works).forEach(w=>{ const wk=s.works[w]; if(!wk||typeof wk!=="object"){ delete s.works[w]; return; }
+    if(Array.isArray(wk.items)){ wk.items=wk.items.filter(it=>it&&typeof it==="object").map(it=>({name:it.name||"",plan:it.plan||null,act:it.act||null,vendor:it.vendor||null})); }
+  });
+  if(!s.moveinClean||typeof s.moveinClean!=="object") s.moveinClean={order:null,done:null};
+  if(!s.keyChange||typeof s.keyChange!=="object") s.keyChange={order:null,done:null};
+  return s;
+}
+function applyData(obj){
+  if(!obj||!Array.isArray(obj.sites)) throw new Error("データ形式が不正です");
+  sites = obj.sites.map(normalizeSite);
+  if(Array.isArray(obj.vendorMaster)&&obj.vendorMaster.length) vendorMaster=obj.vendorMaster;
+  if(Array.isArray(obj.buildingMaster)) buildingMaster=obj.buildingMaster;
+  if(typeof obj.nextId==="number") nextId=obj.nextId;
+  syncAllPhase5(); renderStats(); renderBody(); renderCalendar();
+}
+function setSyncStatus(msg,ok){ const el=document.getElementById("syncStatus"); if(!el)return; el.textContent=msg; el.style.color= ok===false?"var(--text-danger)":ok===true?"var(--text-success)":"var(--text-muted)"; }
+function fmtStamp(iso_){ try{ const d=new Date(iso_); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }catch(_){ return ""; } }
+
+// URLの記憶（このブラウザに保存。localStorageが使えない環境では当セッションのみ）
+function loadGasUrl(){ try{ return localStorage.getItem("gasUrl")||""; }catch(_){ return ""; } }
+function saveGasUrl(u){ try{ localStorage.setItem("gasUrl",u); }catch(_){ } }
+function loadGasToken(){ try{ return localStorage.getItem("gasToken")||""; }catch(_){ return ""; } }
+function saveGasToken(t){ try{ localStorage.setItem("gasToken",t); }catch(_){ } }
+
+// 起動時：シートから読み込み
+async function cloudLoad(silent){
+  if(!GAS_URL){ if(!silent) setSyncStatus("接続先URLが未設定です（設定を開いて入力）",false); return; }
+  setSyncStatus("読み込み中…");
+  try{
+    const url=GAS_URL+(GAS_URL.includes("?")?"&":"?")+"token="+encodeURIComponent(GAS_TOKEN);
+    const res=await fetch(url,{method:"GET"});
+    const j=await res.json();
+    if(!j.ok){ if(j.error==="unauthorized"){ setSyncStatus("合言葉が違います（接続設定を確認）",false); return; } throw new Error(j.error||"error"); }
+    lastUpdatedAt=j.updatedAt||"";
+    if(j.data){ applyData(JSON.parse(j.data)); dirty=false; setSyncStatus(`読み込みました（更新 ${fmtStamp(lastUpdatedAt)}）`,true); }
+    else { setSyncStatus("シートは空です。現在の内容を保存すると初期データになります。"); }
+  }catch(e){ setSyncStatus("読み込みに失敗しました（URL・共有設定を確認）",false); }
+}
+async function cloudSave(){
+  if(!GAS_URL){ setSyncStatus("接続先URLが未設定です",false); return; }
+  if(saving){ pendingSave=true; return; }
+  saving=true; setSyncStatus("保存中…");
+  try{
+    const payload={ token:GAS_TOKEN, data:serializeData(), baseUpdatedAt:lastUpdatedAt||null };
+    const res=await fetch(GAS_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});
+    const j=await res.json();
+    if(j.ok){ lastUpdatedAt=j.updatedAt||lastUpdatedAt; dirty=false; setSyncStatus(`保存しました（${fmtStamp(j.updatedAt)}）`,true); }
+    else if(j.error==="unauthorized"){ setSyncStatus("合言葉が違います（接続設定を確認）",false); }
+    else if(j.error==="conflict"){
+      setSyncStatus("他の人が先に更新しました。最新を読み込みます…",false);
+      await cloudLoad(true);
+      setSyncStatus("最新を読み込みました。編集内容を確認して再度保存してください。",false);
+    }
+    else if(j.error==="busy"){ setSyncStatus("混み合っています。少し後に自動再保存します。"); pendingSave=true; }
+    else throw new Error(j.error||"error");
+  }catch(e){ setSyncStatus("保存に失敗しました（通信・URLを確認）",false); }
+  finally{
+    saving=false;
+    if(pendingSave){ pendingSave=false; setTimeout(cloudSave,800); }
+  }
+}
+// 自動保存（連続編集をまとめる：最後の編集から1.2秒後に1回だけ送信）
+function scheduleAutoSave(){
+  if(!GAS_URL) return;
+  if(autoSaveTimer) clearTimeout(autoSaveTimer);
+  setSyncStatus("編集あり（まもなく自動保存）");
+  autoSaveTimer=setTimeout(()=>{ autoSaveTimer=null; cloudSave(); },1200);
+}
+
+// ===== 定期自動更新（開きっぱなしでも最新化） =====
+const POLL_INTERVAL_MS=30000; // チェック間隔（30秒）。変更可
+let pollTimer=null, polling=false;
+// いま編集中か（編集中は自動取り込みを見送る）
+function isEditing(){
+  // 未保存のローカル変更がある間は絶対に取り込まない（保存優先）
+  if(dirty) return true;
+  // 日付/時刻の入力ポップアップ、列フィルター、各種モーダルが開いている
+  if(document.getElementById("inlinedate")||document.getElementById("inlinedt")||document.getElementById("inlinetime")) return true;
+  if(document.getElementById("colfilterpop")||document.getElementById("settingsmodal")||document.getElementById("newsitemodal")) return true;
+  // 自動保存待ち・保存中・ドラッグ中
+  if(autoSaveTimer||saving||pendingSave) return true;
+  if(typeof DND!=="undefined" && DND) return true;
+  // テキスト入力中（検索欄など）
+  const ae=document.activeElement;
+  if(ae && (ae.tagName==="INPUT"||ae.tagName==="TEXTAREA"||ae.tagName==="SELECT")) return true;
+  return false;
+}
+// サーバの更新時刻だけ軽く確認し、新しければ静かに取り込む
+async function pollCheck(){
+  if(!GAS_URL||polling) return;
+  if(isEditing()) return; // 編集中は見送り（次回チェックで再判定）
+  polling=true;
+  try{
+    const url=GAS_URL+(GAS_URL.includes("?")?"&":"?")+"token="+encodeURIComponent(GAS_TOKEN);
+    const res=await fetch(url,{method:"GET"});
+    const j=await res.json();
+    if(j.ok && j.updatedAt && j.updatedAt!==lastUpdatedAt){
+      // 取り込み直前にもう一度編集中チェック（この間に操作を始めた場合は中止）
+      if(isEditing()){ polling=false; return; }
+      lastUpdatedAt=j.updatedAt;
+      if(j.data){ applyData(JSON.parse(j.data)); dirty=false; setSyncStatus(`他の人の更新を反映しました（${fmtStamp(j.updatedAt)}）`,true); }
+    }
+  }catch(e){ /* 通信失敗は次回に任せる（画面は止めない） */ }
+  finally{ polling=false; }
+}
+function startPolling(){ if(pollTimer) clearInterval(pollTimer); pollTimer=setInterval(pollCheck,POLL_INTERVAL_MS); }
+
+// 手動：読込ボタン（未保存があれば警告）
+function doLoad(){ if(dirty && !confirm("未保存の変更があります。読み込むとこの変更は失われます。よろしいですか？")) return; cloudLoad(false); }
+// ファイル書出（バックアップ用）
+function doExport(){
+  const blob=new Blob([serializeData()],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  const p=n=>String(n).padStart(2,"0"); const d=new Date();
+  a.href=url; a.download=`リフォーム進捗データ_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  setSyncStatus("ファイルを書き出しました",true);
+}
+// ファイル取込（復元用）。取込後は自動保存でシートにも反映
+function doImport(file){
+  const reader=new FileReader();
+  reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); applyData(obj); setSyncStatus(`ファイルを取り込みました（${file.name}）`,true); scheduleAutoSave(); }catch(e){ setSyncStatus("取込に失敗しました（ファイル形式を確認）",false); } };
+  reader.onerror=()=>setSyncStatus("ファイル読み取りに失敗しました",false);
+  reader.readAsText(file);
+}
+// 接続設定ダイアログ
+function openSettings(){
+  const old=document.getElementById("settingsmodal"); if(old) old.remove();
+  const ov=document.createElement("div");
+  ov.id="settingsmodal";
+  ov.style.cssText="position:fixed; inset:0; z-index:11000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
+  ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:20px; width:460px; max-width:94vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
+    <div style="font-size:15px; font-weight:600; margin-bottom:12px;">共有（Googleスプレッドシート）接続設定</div>
+    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:6px;">Apps ScriptのウェブアプリURL</label>
+    <input type="text" id="gasUrlInput" value="${GAS_URL.replace(/"/g,'&quot;')}" placeholder="https://script.google.com/macros/s/..../exec" style="width:100%; box-sizing:border-box; font-size:13px; padding:7px 9px; margin-bottom:12px;">
+    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:6px;">合言葉（Apps Script側のTOKENと同じ値）</label>
+    <input type="text" id="gasTokenInput" value="${GAS_TOKEN.replace(/"/g,'&quot;')}" placeholder="例: arise-reform-8347-xyz" style="width:100%; box-sizing:border-box; font-size:13px; padding:7px 9px; margin-bottom:6px;">
+    <div style="font-size:11px; color:var(--text-muted); margin-bottom:16px;">URLと合言葉はこのブラウザに記憶されます。社内の各PCで一度だけ設定してください。<br>保存のたびにスプレッドシート内の「history」シートへ自動でバックアップが蓄積されます。</div>
+    <div style="border-top:0.5px solid var(--border); padding-top:14px; margin-bottom:14px;">
+      <div style="font-size:13px; font-weight:600; margin-bottom:8px;">物件マスタ（新規現場登録の候補）</div>
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">よく使う物件名を登録しておくと、新規現場登録でプルダウンから選べます。レアな物件は登録不要（登録画面で「その他（手入力）」）。</div>
+      <div id="bmList" style="display:flex; flex-direction:column; gap:4px; max-height:180px; overflow:auto; margin-bottom:8px;"></div>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="bmNew" placeholder="物件名を追加" style="flex:1; box-sizing:border-box; font-size:13px; padding:6px 8px;">
+        <button id="bmAdd" style="font-size:13px; padding:6px 14px;">追加</button>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button id="stCancel" style="font-size:13px; padding:6px 14px;">キャンセル</button>
+      <button id="stSave" style="font-size:13px; padding:6px 16px; background:var(--text-accent); color:#fff; border-color:var(--text-accent);">保存して接続</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector("#stCancel").onclick=close;
+  ov.querySelector("#gasUrlInput").focus();
+  // 物件マスタ管理
+  const renderBmList=()=>{
+    const box=ov.querySelector("#bmList");
+    box.innerHTML = buildingMaster.length ? buildingMaster.map((b,i)=>`<div style="display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 6px; background:var(--surface-1); border-radius:6px;"><span style="flex:1;">${b}</span><button data-bmdel="${i}" style="font-size:11px; padding:1px 8px;">削除</button></div>`).join("") : `<div style="font-size:12px; color:var(--text-muted);">未登録</div>`;
+    box.querySelectorAll("[data-bmdel]").forEach(el=>el.addEventListener("click",()=>{ buildingMaster.splice(Number(el.dataset.bmdel),1); dirty=true; scheduleAutoSave(); renderBmList(); }));
+  };
+  renderBmList();
+  const bmAdd=()=>{ const inp=ov.querySelector("#bmNew"); const v=inp.value.trim(); if(v&&!buildingMaster.includes(v)){ buildingMaster.push(v); dirty=true; scheduleAutoSave(); } inp.value=""; inp.focus(); renderBmList(); };
+  ov.querySelector("#bmAdd").onclick=bmAdd;
+  ov.querySelector("#bmNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); bmAdd(); } });
+  ov.querySelector("#stSave").onclick=()=>{
+    const u=ov.querySelector("#gasUrlInput").value.trim();
+    const t=ov.querySelector("#gasTokenInput").value.trim();
+    GAS_URL=u; saveGasUrl(u); GAS_TOKEN=t; saveGasToken(t); close();
+    cloudLoad(false); // 設定直後に読み込み
+    startPolling();
+  };
+}
+
+function refresh(){ pickedSite=null; pickedWork=null; spanStart=null; dirty=true;
+  syncAllPhase5(); renderStats(); renderBody(); renderCalendar();
+  scheduleAutoSave(); }
+
+// ===== 業者向けPDF出力 =====
+// 現在のカレンダー表示期間（月/週）を、指定業者の工事だけに絞って印刷用HTMLに描画する。
+// 既存のdaysInPeriod/週組みロジックを踏襲。ドラッグ等のインタラクションは持たせない（静的表示）。
+function pdfSpansForVendor(vendor){
+  let e=[];
+  sites.forEach(s=>{ Object.keys(s.works).forEach(w=>{ if(WORKDEF[w].type!=="span")return; const wk=s.works[w];
+    if(wk.start&&wk.end&&wk.vendor===vendor) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act}); }); });
+  return e;
+}
+function pdfSinglesOnDay(key,vendor){
+  let out=[];
+  sites.forEach(s=>{ Object.keys(s.works).forEach(w=>{ const t=WORKDEF[w].type, wk=s.works[w];
+    if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.plan===key&&it.vendor===vendor) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act}); }); }
+    else if(t==="single"){ if(wk.plan===key&&wk.vendor===vendor) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act}); }
+  }); });
+  return out;
+}
+// 一覧用：期間内に掛かる、その業者の全工事（span/single/multi明細）を集める
+function pdfListForVendor(vendor,days){
+  const first=iso(days[0].getFullYear(),days[0].getMonth(),days[0].getDate());
+  const last=iso(days[days.length-1].getFullYear(),days[days.length-1].getMonth(),days[days.length-1].getDate());
+  const inRange=(a,b)=>{ // 期間[a,b]がカレンダー範囲[first,last]と重なるか
+    const bb=b||a; return a&&(a<=last)&&(bb>=first);
+  };
+  let rows=[];
+  sites.forEach(s=>{ Object.keys(s.works).forEach(w=>{ const t=WORKDEF[w].type, wk=s.works[w];
+    if(t==="span"){ if(wk.vendor===vendor && wk.start && inRange(wk.start,wk.end))
+      rows.push({site:s,work:w,name:"",start:wk.start,end:wk.end,act:wk.act,kind:"span"}); }
+    else if(t==="single"){ if(wk.vendor===vendor && wk.plan && inRange(wk.plan,null))
+      rows.push({site:s,work:w,name:"",start:wk.plan,end:null,act:wk.act,kind:"single"}); }
+    else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.vendor===vendor && it.plan && inRange(it.plan,null))
+      rows.push({site:s,work:w,name:it.name||"",start:it.plan,end:null,act:it.act,kind:"multi"}); }); }
+  }); });
+  rows.sort((a,b)=>(a.start||"").localeCompare(b.start||"")||siteLabel(a.site).localeCompare(siteLabel(b.site)));
+  return rows;
+}
+function buildPdf(){
+  const vendor=calVendor;
+  if(vendor==="all"){ alert("PDFを作成するには、上の「全業者」プルダウンから業者を1つ選んでください。選んだ業者の工事だけを出力します。"); return; }
+
+  const days=daysInPeriod();
+  const y=calAnchor.getFullYear(), m=calAnchor.getMonth();
+  let perLabel;
+  if(calView==="week"){ const a=days[0],b=days[6]; perLabel=`${a.getFullYear()}年 ${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
+  else perLabel=`${y}年${m+1}月`;
+
+  const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
+  const tKey=todayKey();
+
+  // 週組み（renderCalendarと同じ規則）
+  let weeks=[];
+  if(calView==="week") weeks=[days];
+  else { const firstDow=days[0].getDay(); let row=new Array(firstDow).fill(null); days.forEach(dt=>{row.push(dt); if(row.length===7){weeks.push(row); row=[];}}); if(row.length){while(row.length<7)row.push(null); weeks.push(row);} }
+
+  // スロット割当（帯の重なり回避、renderCalendarと同じ）
+  let spans=pdfSpansForVendor(vendor);
+  spans.sort((a,b)=>a.start.localeCompare(b.start));
+  const slotEnds=[]; spans.forEach(e=>{let sl=0; while(sl<slotEnds.length&&slotEnds[sl]>=e.start)sl++; e.slot=sl; slotEnds[sl]=e.end;});
+
+  const wd=["日","月","火","水","木","金","土"];
+  const ROW2=16, GAP2=2, colW=100/7;
+
+  // 見出し
+  let html=`<div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:6px;">
+      <div>
+        <div style="font-size:18px; font-weight:700;">工事予定表 — ${escapeHtml(vendor)} 御中</div>
+        <div style="font-size:13px; color:#333; margin-top:2px;">対象期間：${perLabel}</div>
+      </div>
+      <div style="font-size:11px; color:#555; text-align:right;">アライヴグループ<br>発行日：${fmt(tKey)}</div>
+    </div>`;
+
+  // 凡例
+  const usedWorks=[...new Set([...spans.map(e=>e.work), ...weeks.flat().filter(Boolean).flatMap(dt=>pdfSinglesOnDay(keyOf(dt),vendor).map(e=>e.work))])];
+  if(usedWorks.length){
+    html+=`<div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px; font-size:11px;">`+
+      usedWorks.map(w=>{const c=WORKCOLOR[w]; return `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:11px; height:11px; border-radius:2px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("")+
+      `<span style="color:#666;">（濃い色＝完了済み）</span></div>`;
+  }
+
+  // 曜日ヘッダ
+  html+=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:3px;">`+
+    wd.map((d,i)=>`<div style="text-align:center; font-size:11px; font-weight:600; color:${i===0?'#c0392b':i===6?'#2563eb':'#444'};">${d}</div>`).join("")+`</div>`;
+
+  // 週ごと
+  weeks.forEach(week=>{
+    let usedSpanSlots=0;
+    week.forEach(dt=>{ if(!dt)return; const k=keyOf(dt); spans.forEach(e=>{ if(k>=e.start&&k<=e.end) usedSpanSlots=Math.max(usedSpanSlots,e.slot+1); }); });
+    const spanAreaH=usedSpanSlots*(ROW2+GAP2);
+    const topPad=22, cellMinH=(calView==="week"?96:64);
+
+    let cellsHtml=`<div class="pdf-daygrid" style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; position:relative;">`;
+    week.forEach(dt=>{
+      if(!dt){ cellsHtml+=`<div></div>`; return; }
+      const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey);
+      const hol=holidayName(k);
+      const singles=pdfSinglesOnDay(k,vendor);
+      const chips=singles.map(e=>`<div style="background:${e.done?WORKCOLOR[e.work].done:WORKCOLOR[e.work].bg}; border:1px solid ${WORKCOLOR[e.work].fg}; color:${WORKCOLOR[e.work].fg}; font-size:9px; line-height:1.25; padding:1px 4px; margin-top:2px; border-radius:4px; word-break:break-word;">${escapeHtml(pdfLabel(e))}</div>`).join("");
+      const dnumColor = dow===0?'#c0392b':(hol?'#c0392b':dow===6?'#2563eb':'#555');
+      const cellBg = isToday?'#eef3fd':(hol?'#f8d7d7':'#fff');
+      const holLabel = hol?`<div style="font-size:8px; color:#c0392b; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
+      cellsHtml+=`<div class="pdf-daycell" style="min-height:${cellMinH}px; border:${isToday?'1.2px solid #2563eb':'0.5px solid #ccc'}; border-radius:6px; padding:3px; background:${cellBg};">
+        <div style="font-size:11px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getDate()}${isToday?' <span style="font-size:8px; padding:0 3px; border-radius:3px; background:#dbeafe; color:#2563eb;">今日</span>':''}</div>${holLabel}
+        <div style="height:${spanAreaH}px;"></div>${chips}</div>`;
+    });
+    cellsHtml+=`</div>`;
+
+    let overlay=`<div style="position:absolute; inset:0; pointer-events:none;">`;
+    const weekKeys=week.map(dt=>dt?keyOf(dt):null);
+    spans.forEach(e=>{
+      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}}
+      if(fc<0) return;
+      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+e.slot*(ROW2+GAP2);
+      const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
+      const c=WORKCOLOR[e.work], bg=e.done?c.done:c.bg, fg=c.fg;
+      const radius=`${startsHere?'5px':'2px'} ${endsHere?'5px':'2px'} ${endsHere?'5px':'2px'} ${startsHere?'5px':'2px'}`;
+      overlay+=`<div style="position:absolute; left:calc(${left}% + 3px); width:calc(${width}% - 6px); top:${top}px; height:${ROW2}px; line-height:${ROW2}px; font-size:9px; padding:0 4px; border-radius:${radius}; background:${bg}; border:1px solid ${fg}; color:${fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600;">${escapeHtml(pdfLabel(e))}</div>`;
+    });
+    overlay+=`</div>`;
+    html+=`<div class="pdf-week" style="position:relative; margin-bottom:3px;">${cellsHtml}${overlay}</div>`;
+  });
+
+  // 現場名一覧（この業者の工事が期間内にある現場を1行ずつ。新項目＋金額合計）
+  const list=pdfListForVendor(vendor,days);
+  // 現場ごとに集約（重複排除、順序は最初の予定日順）
+  const siteOrder=[]; const seen=new Set();
+  list.forEach(r=>{ if(!seen.has(r.site.id)){ seen.add(r.site.id); siteOrder.push(r.site); } });
+
+  const yen=n=>(n==null||n==="")?"":("¥"+Number(n).toLocaleString("ja-JP"));
+  // この業者が期間内にクリーニング工事を担当していれば金額列＆内装完了列を表示
+  const showMoney = list.some(r=>r.work==="クリーニング");
+  const showNaiso = showMoney; // 内装完了はクリーニング業者のみ
+  // 対象業者のその現場での作業予定日（リフォームは期間、他は単日）
+  const workDateForSite=(s)=>{
+    // その現場でこの業者が担当する工事の予定日を集める
+    let spans=[], singles=[];
+    Object.keys(s.works).forEach(w=>{ const t=WORKDEF[w].type, wk=s.works[w];
+      if(t==="span"){ if(wk.vendor===vendor && wk.start) spans.push(`${fmt(wk.start)}〜${fmt(wk.end)||''}`); }
+      else if(t==="single"){ if(wk.vendor===vendor && wk.plan) singles.push(fmt(wk.plan)); }
+      else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.vendor===vendor && it.plan) singles.push(fmt(it.plan)); }); }
+    });
+    return [...spans,...singles].join("、");
+  };
+  const PER_PAGE=20;
+  let listHtml="";
+  if(siteOrder.length===0){
+    listHtml=`<div style="font-size:12px; color:#666; margin-top:12px;">この期間に対象の現場はありません。</div>`;
+  } else {
+    // 合計（全ページ通算、金額列表示時のみ）
+    let tClean=0,tAc=0,tPeel=0;
+    siteOrder.forEach(s=>{ const wk=s.works["クリーニング"]; if(wk){ tClean+=Number(wk.cleanFee||0); tAc+=Number(wk.acFee||0); tPeel+=Number(wk.peelFee||0);} });
+    const grand=tClean+tAc+tPeel;
+
+    const naisoHead = showNaiso ? `<th style="padding:4px 6px; border:0.5px solid #ccc;">内装完了</th>` : "";
+    const moneyHead = showMoney ? `
+            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">清掃費</th>
+            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">エアコン</th>
+            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">剥離</th>` : "";
+
+    const pages=Math.ceil(siteOrder.length/PER_PAGE);
+    for(let p=0;p<pages;p++){
+      const chunk=siteOrder.slice(p*PER_PAGE,(p+1)*PER_PAGE);
+      const isLast=(p===pages-1);
+      const pageBreak = p>0 ? 'break-before:page;' : '';
+      listHtml+=`<div style="${pageBreak} margin-top:${p>0?'0':'14px'};">
+        <div style="font-size:14px; font-weight:700; margin-bottom:6px; border-bottom:1.5px solid #333; padding-bottom:3px;">現場名一覧（${escapeHtml(vendor)}）${pages>1?` <span style="font-size:11px; font-weight:400;">${p+1}/${pages}ページ</span>`:''}</div>
+        <table style="width:100%; border-collapse:collapse; font-size:10.5px;">
+          <thead><tr style="background:#f0efea; text-align:left;">
+            <th style="padding:4px 6px; border:0.5px solid #ccc;">作業予定日</th>
+            <th style="padding:4px 6px; border:0.5px solid #ccc;">現場名</th>${naisoHead}
+            <th style="padding:4px 6px; border:0.5px solid #ccc;">請求先</th>
+            <th style="padding:4px 6px; border:0.5px solid #ccc;">家具</th>${moneyHead}
+            <th style="padding:4px 6px; border:0.5px solid #ccc;">オートロック</th>
+            <th style="padding:4px 6px; border:0.5px solid #ccc;">備考</th>
+          </tr></thead><tbody>`;
+      chunk.forEach(s=>{
+        const rf=s.works["リフォーム"]; const naiso=rf&&rf.end?fmt(rf.end):"";
+        const wk=s.works["クリーニング"]||{};
+        const furn=s.furniture==="あり"?"あり":"";  // なしは空欄
+        const naisoCell = showNaiso ? `<td style="padding:4px 6px; border:0.5px solid #ccc; white-space:nowrap;">${naiso}</td>` : "";
+        const moneyCells = showMoney ? `
+          <td style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">${yen(wk.cleanFee)}</td>
+          <td style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">${yen(wk.acFee)}</td>
+          <td style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">${yen(wk.peelFee)}</td>` : "";
+        listHtml+=`<tr>
+          <td style="padding:4px 6px; border:0.5px solid #ccc; white-space:nowrap;">${workDateForSite(s)}</td>
+          <td style="padding:4px 6px; border:0.5px solid #ccc; white-space:nowrap;">${escapeHtml(siteLabel(s))}号室</td>${naisoCell}
+          <td style="padding:4px 6px; border:0.5px solid #ccc;">${escapeHtml(s.billTo||"")}</td>
+          <td style="padding:4px 6px; border:0.5px solid #ccc;">${furn}</td>${moneyCells}
+          <td style="padding:4px 6px; border:0.5px solid #ccc;">${escapeHtml(s.autolock||"")}</td>
+          <td style="padding:4px 6px; border:0.5px solid #ccc;">${escapeHtml(s.note||"")}</td>
+        </tr>`;
+      });
+      // 合計・総合計行は最終ページ、金額列表示時のみ
+      if(isLast && showMoney){
+        const leadCols = 2 + (showNaiso?1:0) + 2; // 作業予定日,現場名,(内装完了),請求先,家具
+        listHtml+=`<tr style="background:#eef1ee; font-weight:700;">
+          <td colspan="${leadCols}" style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">合計</td>
+          <td style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${yen(tClean)}</td>
+          <td style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${yen(tAc)}</td>
+          <td style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${yen(tPeel)}</td>
+          <td colspan="2" style="padding:5px 6px; border:0.5px solid #ccc;"></td>
+        </tr>
+        <tr style="background:#e2e8dd; font-weight:700;">
+          <td colspan="${leadCols}" style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">総合計（清掃費＋エアコン＋剥離）</td>
+          <td colspan="3" style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${yen(grand)}</td>
+          <td colspan="2" style="padding:5px 6px; border:0.5px solid #ccc;"></td>
+        </tr>`;
+      }
+      listHtml+=`</tbody></table></div>`;
+    }
+  }
+  html+=listHtml;
+
+  // 非表示iframeにPDF内容を書き込み、そのiframeだけを印刷する。
+  // 別ウィンドウ（window.open）方式は、ポップアップブロックや子ウィンドウのフォーカス奪取で
+  // 親画面のUI（ドロップダウン等）が反応しなくなる問題があったため、iframe方式に変更。
+  const todayStr = iso(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()); // 作成日 YYYY-MM-DD
+  const pdfTitle = `工事予定表 ${vendor} ${todayStr}`;
+  const doc=`<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>${escapeHtml(pdfTitle)}</title>
+    <style>
+      *{box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;}
+      body{font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Meiryo",sans-serif; margin:0; padding:14px; color:#222; background:#fff;}
+      @media print{ @page{size:A4 portrait; margin:10mm;} body{padding:0;} .pdf-week,.pdf-daycell{break-inside:avoid;} }
+    </style></head><body>${html}</body></html>`;
+
+  const old=document.getElementById("pdfframe"); if(old) old.remove();
+  const iframe=document.createElement("iframe");
+  iframe.id="pdfframe";
+  iframe.style.cssText="position:fixed; right:0; bottom:0; width:0; height:0; border:0; visibility:hidden;";
+  document.body.appendChild(iframe);
+  let printed=false;
+  // 保存ダイアログの既定ファイル名は多くのブラウザで「親ページのdocument.title」を使うため、
+  // 印刷の間だけ親のtitleをPDF名に差し替え、終了後に元へ戻す。
+  const restoreTitle=()=>{ document.title=APP_TITLE; };
+  const doPrint=()=>{ if(printed)return; printed=true;
+    try{
+      const win=iframe.contentWindow;
+      document.title=pdfTitle;           // 親ページのタイトルを一時変更
+      win.focus(); win.print();
+    }catch(err){ alert("印刷の起動に失敗しました。ブラウザの印刷機能をご利用ください。"); }
+    finally{
+      // 印刷ダイアログが閉じた後に復元（afterprint、無ければ遅延で保険）
+      window.addEventListener("afterprint",restoreTitle,{once:true});
+      setTimeout(restoreTitle,60000);
+    }
+  };
+  iframe.addEventListener("load",doPrint);
+  const idoc=iframe.contentWindow.document;
+  idoc.open(); idoc.write(doc); idoc.close();
+  // 一部ブラウザで about:blank のloadが発火しない場合に備えたフォールバック
+  setTimeout(doPrint,500);
+}
+function pdfLabel(e){ const nm=e.name?`·${e.name}`:""; return `[${WORKABBR[e.work]}]${siteLabel(e.site)}${nm}`; }
+function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
+  const t=b.dataset.tab;
+  document.querySelectorAll(".tabbtn").forEach(x=>{x.style.borderBottomColor="transparent"; x.style.color="var(--text-secondary)"; x.style.fontWeight="400";});
+  b.style.borderBottomColor="var(--border-accent)"; b.style.color="var(--text-primary)"; b.style.fontWeight="500";
+  document.getElementById("tab-matrix").style.display=(t==="matrix")?"block":"none";
+  document.getElementById("tab-calendar").style.display=(t==="calendar")?"block":"none";
+}));
+function setView(v){ calView=v;
+  if(v==="week"){ weekFromToday=true; calAnchor=new Date(TODAY); }
+  else { calAnchor=new Date(TODAY.getFullYear(),TODAY.getMonth(),1); }
+  document.getElementById("viewmonth").style.color=v==="month"?"var(--text-primary)":"var(--text-secondary)";
+  document.getElementById("viewmonth").style.background=v==="month"?"var(--surface-3)":"transparent";
+  document.getElementById("viewweek").style.color=v==="week"?"var(--text-primary)":"var(--text-secondary)";
+  document.getElementById("viewweek").style.background=v==="week"?"var(--surface-3)":"transparent";
+  renderCalendar();
+}
+document.getElementById("viewmonth").onclick=()=>setView("month");
+document.getElementById("viewweek").onclick=()=>setView("week");
+document.getElementById("sitesel").addEventListener("change",e=>{calSite=e.target.value; renderCalendar();});
+document.getElementById("worksel").addEventListener("change",e=>{calWork=e.target.value; renderCalendar();});
+document.getElementById("vendorsel").addEventListener("change",e=>{calVendor=e.target.value; renderCalendar();});
+document.getElementById("prevp").onclick=()=>{ if(calView==="week"){ if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); } calAnchor.setDate(calAnchor.getDate()-7); } else {calAnchor=new Date(calAnchor.getFullYear(),calAnchor.getMonth()-1,1);} renderCalendar();};
+document.getElementById("nextp").onclick=()=>{ if(calView==="week"){ if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); } calAnchor.setDate(calAnchor.getDate()+7); } else {calAnchor=new Date(calAnchor.getFullYear(),calAnchor.getMonth()+1,1);} renderCalendar();};
+document.getElementById("filter").onchange=renderBody;
+document.getElementById("search").addEventListener("input",renderBody);
+document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{ sortKey=b.dataset.sort; renderBody(); }));
+document.getElementById("clearfilters").addEventListener("click",clearAllColFilters);
+document.getElementById("btnSettings").addEventListener("click",openSettings);
+document.getElementById("btnLoad").addEventListener("click",doLoad);
+document.getElementById("btnExport").addEventListener("click",doExport);
+document.getElementById("btnImport").addEventListener("click",()=>document.getElementById("fileImport").click());
+document.getElementById("fileImport").addEventListener("change",(e)=>{ const f=e.target.files&&e.target.files[0]; if(f)doImport(f); e.target.value=""; });
+document.getElementById("pdfbtn").onclick=buildPdf;
+document.getElementById("addbtn").onclick=openNewSiteModal;
+function openNewSiteModal(){ openSiteModal(null); }
+function openEditSiteModal(id){ const s=sites.find(x=>x.id===id); if(s) openSiteModal(s); }
+function openSiteModal(editSite){
+  const isEdit=!!editSite;
+  const old=document.getElementById("newsitemodal"); if(old) old.remove();
+  const ov=document.createElement("div");
+  ov.id="newsitemodal";
+  ov.style.cssText="position:fixed; inset:0; z-index:11000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
+  const cat=isEdit?editSite.category:"三井";
+  const curName = isEdit ? String(editSite.name) : "";
+  const inMaster = buildingMaster.includes(curName);
+  const nameOptions = `<option value="__free__"${(isEdit&&!inMaster)?' selected':''}>その他（手入力）</option>`
+    + buildingMaster.map(b=>`<option value="${b.replace(/"/g,'&quot;')}"${b===curName?' selected':''}>${b}</option>`).join("");
+  ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:20px; width:320px; max-width:92vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
+    <div style="font-size:15px; font-weight:600; margin-bottom:14px;">${isEdit?'現場を編集':'新規現場を追加'}</div>
+    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:12px;">区分
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <label style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:8px; border:1px solid var(--border-strong); border-radius:8px; cursor:pointer;"><input type="radio" name="nscat" value="三井" ${cat==="三井"?'checked':''}> 三井</label>
+        <label style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:8px; border:1px solid var(--border-strong); border-radius:8px; cursor:pointer;"><input type="radio" name="nscat" value="自社" ${cat==="自社"?'checked':''}> 自社</label>
+      </div></label>
+    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:10px;">マンション名（物件マスタから選択）
+      <select id="nsNameSel" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:14px; padding:6px 8px;">${nameOptions}</select></label>
+    <input type="text" id="nsName" value="${(isEdit&&!inMaster)?curName.replace(/"/g,'&quot;'):''}" placeholder="マンション名を手入力" style="width:100%; box-sizing:border-box; margin-bottom:10px; font-size:14px; padding:6px 8px; ${(isEdit&&!inMaster)?'':'display:none;'}">
+    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:16px;">号室<input type="text" id="nsRoom" value="${isEdit?String(editSite.room).replace(/"/g,'&quot;'):''}" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:14px; padding:6px 8px;"></label>
+    ${isEdit&&editSite.category==="三井"?'':`<div style="font-size:11px; color:var(--text-warning); margin-bottom:12px; ${isEdit?'':'display:none;'}"><i class="ti ti-alert-triangle" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i> 区分を変更すると使用する工程が変わります。</div>`}
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button id="nsCancel" style="font-size:13px; padding:6px 14px;">キャンセル</button>
+      <button id="nsOk" style="font-size:13px; padding:6px 16px; background:var(--text-accent); color:#fff; border-color:var(--text-accent);">${isEdit?'保存':'追加'}</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector("#nsCancel").onclick=close;
+  const sel=ov.querySelector("#nsNameSel"), free=ov.querySelector("#nsName");
+  const syncFree=()=>{ if(sel.value==="__free__"){ free.style.display=""; free.focus(); } else { free.style.display="none"; } };
+  sel.addEventListener("change",syncFree);
+  const getName=()=> sel.value==="__free__" ? free.value.trim() : sel.value;
+  if(sel.value==="__free__") free.focus(); else sel.focus();
+  free.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ov.querySelector("#nsRoom").focus(); } });
+  ov.querySelector("#nsRoom").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ov.querySelector("#nsOk").click(); } });
+  ov.querySelector("#nsOk").onclick=()=>{
+    const name=getName(); if(!name){ if(sel.value==="__free__")free.focus(); else sel.focus(); return; }
+    const room=ov.querySelector("#nsRoom").value.trim();
+    const c=ov.querySelector('input[name="nscat"]:checked').value;
+    // 手入力した新しい物件名はマスタに自動登録
+    if(sel.value==="__free__" && name && !buildingMaster.includes(name)) buildingMaster.push(name);
+    if(isEdit){ editSite.name=name; editSite.room=room; editSite.category=c; }
+    else { sites.push(newSite(nextId++,name,room,c)); }
+    close(); refresh();
+  };
+  ov.addEventListener("keydown",e=>{ if(e.key==="Escape")close(); });
+}
+renderHead(); calAnchor=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);
+syncAllPhase5(); renderStats(); renderBody(); renderCalendar();
+// 共有接続：保存済みURLがあれば起動時にシートから読み込む
+GAS_URL=loadGasUrl(); GAS_TOKEN=loadGasToken();
+if(GAS_URL){ cloudLoad(true); setSyncStatus("共有シートに接続中…"); startPolling(); }
+else { setSyncStatus("未接続：サンプル表示中。「接続設定」でURLを設定すると共有できます。"); }
+</script>
+
+<div id="datepop" style="display:none; min-height:0;">
+  <div style="margin-top:10px; background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:12px; padding:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <span style="font-size:13px; color:var(--text-secondary);">日付：</span>
+    <input type="date" id="dateinp" style="width:auto;">
+    <button id="dateok" style="font-size:13px;">確定</button>
+    <button id="dateclr" style="font-size:13px;">クリア</button>
+    <button id="datecancel" style="font-size:13px;">取消</button>
+  </div>
+</div>
+<div id="spanpop" style="display:none; min-height:0;">
+  <div style="margin-top:10px; background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:12px; padding:14px;">
+    <div id="spantitle" style="font-size:13px; font-weight:500; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+      <div style="display:flex; align-items:center; gap:6px;"><span id="spanstart" style="font-size:13px;"></span><button id="spanstartbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+      <div style="display:flex; align-items:center; gap:6px;"><span id="spanend" style="font-size:13px;"></span><button id="spanendbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+      <div style="display:flex; align-items:center; gap:6px;"><span id="spanact" style="font-size:13px;"></span><button id="spanactbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+      <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">業者：<b id="spanvendor"></b></span><button id="spanvendorbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+      <button id="spanclose" style="font-size:12px; padding:3px 10px; margin-left:auto;">閉じる</button>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
