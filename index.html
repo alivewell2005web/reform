@@ -31,8 +31,8 @@ table{background:var(--surface-2);}
 .tabbtn{background:transparent;}
 .viewbtn{background:transparent;}
 #app{max-width:1200px; margin:0 auto;}
-@media (max-width:640px){
-  /* スマホではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
+@media (max-width:640px), (pointer:coarse){
+  /* タッチ端末ではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
   #calgrid{ touch-action:pan-y !important; }
   #calgrid .chip, #calgrid .xchip, #calgrid .span{ touch-action:pan-y !important; cursor:pointer !important; }
 }
@@ -114,7 +114,7 @@ const EXTRA_MTG   ={key:"退去立会",   abbr:"立会",    color:{bg:"#E0E7FF",
 const PHASE_MILESTONE_COLOR={bg:"#F1F5F9",done:"#64748B",fg:"#334155"}; // ②③⑤⑥の工程チップ色
 const WORKDEF={"リフォーム":{type:"span"},"クリーニング":{type:"single"},"設備交換":{type:"multi"},"リペア":{type:"single"},"畳・ふすま":{type:"single"},"設備廃棄":{type:"single"},"その他":{type:"multi"}};
 const WORKS=Object.keys(WORKDEF);
-const WORKABBR={"リフォーム":"内装","クリーニング":"清掃","設備交換":"設備","リペア":"リペア","畳・ふすま":"畳・襖","設備廃棄":"廃棄","その他":"他"};
+const WORKABBR={"リフォーム":"内装","クリーニング":"清掃","設備交換":"設備","リペア":"ﾘﾍﾟｱ","畳・ふすま":"畳・襖","設備廃棄":"廃棄","その他":"他"};
 const WORKCOLOR={
   "リフォーム":{bg:"#BFDBFE",done:"#3B82F6",fg:"#1E3A8A"},
   "クリーニング":{bg:"#A7F3D0",done:"#10B981",fg:"#065F46"},
@@ -124,17 +124,17 @@ const WORKCOLOR={
   "設備廃棄":{bg:"#D1D5DB",done:"#6B7280",fg:"#374151"},
   "その他":{bg:"#A5F3FC",done:"#06B6D4",fg:"#155E75"},
 };
-let vendorMaster=["アルファ","ZERO","大松","シャムス","森上","ガリバー"];
+let vendorMaster=["ｱﾙﾌｧ","ZERO","大松","ｼｬﾑｽ","森上","ｶﾞﾘﾊﾞｰ"];
 // 物件（マンション）マスタ。新規現場登録時のプルダウン候補。編集は「接続設定」内の物件マスタ管理から。
 let buildingMaster=["Gran Bridge Dempo","ウェルホームズ中之島北","ネット　フローラ立売堀","ネットフローラ天満橋","パークアクシスうつぼ公園","パークキューブ北浜","パークタワー梅田","パークタワー北浜","芦屋ガーデン","西天満レジデンス","大阪福島タワー","天満橋ケルスコート","天満橋ケルスコートParkView","堂島レジデンス","北梅田パーク・レジデンス","GateCourt豊中","パークノヴァ西岡本","グランシャリオ夙川","Crescent-T","ヌーヴェレールⅢ","壱番館","GateCourt大阪福島","パークフラッツ弁天町駅前","パークフラッツ安堂寺町","MidCourtウメキタ","MidCourt東三国","GateCourt東三国","パークフラッツ東三国","FS江坂広芝町Ⅱ","GateCourt新大阪North","GateCourt福島海老江","FS福島パークサイド","FF江坂江の木町パークサイド"];
 // 工事種別ごとのデフォルト担当業者
-const DEFAULT_VENDOR={"リフォーム":"アルファ","クリーニング":"ZERO","設備交換":"大松","リペア":"シャムス","畳・ふすま":"森上","設備廃棄":"ガリバー","その他":null};
+const DEFAULT_VENDOR={"リフォーム":"ｱﾙﾌｧ","クリーニング":"ZERO","設備交換":"大松","リペア":"ｼｬﾑｽ","畳・ふすま":"森上","設備廃棄":"ｶﾞﾘﾊﾞｰ","その他":null};
 
 // 立会者の選択肢（①退去立会）
 const ATTENDEES=["鵜飼","野間元","秀島","西谷","森","現調"];
 // アルファ＆ZERO 複合フィルタ用の特殊値
 const VENDOR_AZ="__alpha_zero__";
-const AZ_VENDORS=["アルファ","ZERO"];
+const AZ_VENDORS=["ｱﾙﾌｧ","ZERO"];
 // ZEROクリーニングの請求先別の色（ZEROのみ絞り込み時に適用）
 const ZERO_BILL_COLOR={"ウエル":{bg:"#BAE6FD",done:"#0EA5E9",fg:"#075985"},"デザイン":{bg:"#FBCFE8",done:"#EC4899",fg:"#9D174D"},"レジデンシャル":WORKCOLOR["クリーニング"]};
 // 要件6：1社絞り込み時に使えるカスタム色パレット
@@ -183,16 +183,16 @@ let zeroHolidays=new Set();
 let sites=[
   Object.assign(newSite(1,"パークアクシスうつぼ公園","803","三井"),{plan:["2026-08-05","2026-08-07","2026-08-10","2026-08-12","2026-08-20","2026-08-28"],act:["2026-08-01","2026-08-03","2026-08-05",null,null,null],
     mtgTime:"10:00",billTo:"デザイン",furniture:"なし",autolock:"呼5100",note:"当社",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-15",done:"2026-08-17"},
-    works:{"リフォーム":{start:"2026-08-06",end:"2026-08-08",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-10",act:null,vendor:"ZERO",cleanFee:38000,acFee:12000,peelFee:0},"設備交換":{items:[{name:"浴室乾燥機",plan:null,act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-12",act:null,vendor:"シャムス"},"設備廃棄":{plan:"2026-08-06",act:null,vendor:"ガリバー"}}}),
+    works:{"リフォーム":{start:"2026-08-06",end:"2026-08-08",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-10",act:null,vendor:"ZERO",cleanFee:38000,acFee:12000,peelFee:0},"設備交換":{items:[{name:"浴室乾燥機",plan:null,act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-12",act:null,vendor:"ｼｬﾑｽ"},"設備廃棄":{plan:"2026-08-06",act:null,vendor:"ｶﾞﾘﾊﾞｰ"}}}),
   Object.assign(newSite(2,"パークキューブ北浜","1205","三井"),{plan:["2026-08-06","2026-08-08","2026-08-11","2026-08-25","2026-08-24","2026-08-31"],act:["2026-08-15","2026-08-18","2026-08-19",null,null,null],
     mtgTime:"13:30",billTo:"ウエル",furniture:"あり",autolock:"※1234呼",note:"オープン",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-19",done:"2026-08-27"},
-    works:{"リフォーム":{start:"2026-08-20",end:"2026-08-22",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-24",act:null,vendor:"ZERO",cleanFee:45000,acFee:24000,peelFee:15000},"設備交換":{items:[{name:"給湯器交換",plan:"2026-08-20",act:null,vendor:"大松"},{name:"レンジフード交換",plan:"2026-08-21",act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-25",act:null,vendor:"シャムス"},"畳・ふすま":{plan:"2026-08-21",act:null,vendor:"森上"}}}),
+    works:{"リフォーム":{start:"2026-08-20",end:"2026-08-22",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-24",act:null,vendor:"ZERO",cleanFee:45000,acFee:24000,peelFee:15000},"設備交換":{items:[{name:"給湯器交換",plan:"2026-08-20",act:null,vendor:"大松"},{name:"レンジフード交換",plan:"2026-08-21",act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-25",act:null,vendor:"ｼｬﾑｽ"},"畳・ふすま":{plan:"2026-08-21",act:null,vendor:"森上"}}}),
   Object.assign(newSite(3,"西天満レジデンス","305","三井"),{plan:["2026-08-04","2026-08-06","2026-08-08","2026-08-19","2026-08-26","2026-08-31"],act:["2026-08-08","2026-08-10","2026-08-12",null,null,null],
     mtgTime:"09:00",billTo:"レジデンシャル",furniture:"なし",autolock:"",note:"",moveinClean:{order:"2026-08-24",done:"2026-08-28"},keyChange:{order:"2026-08-24",done:null},
-    works:{"リフォーム":{start:"2026-08-13",end:"2026-08-17",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-18",act:null,vendor:"ZERO",cleanFee:40000,acFee:12000,peelFee:0},"リペア":{plan:"2026-08-19",act:null,vendor:"シャムス"},"畳・ふすま":{plan:"2026-08-13",act:null,vendor:"森上"},"設備廃棄":{plan:"2026-08-14",act:null,vendor:"ガリバー"}}}),
+    works:{"リフォーム":{start:"2026-08-13",end:"2026-08-17",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-18",act:null,vendor:"ZERO",cleanFee:40000,acFee:12000,peelFee:0},"リペア":{plan:"2026-08-19",act:null,vendor:"ｼｬﾑｽ"},"畳・ふすま":{plan:"2026-08-13",act:null,vendor:"森上"},"設備廃棄":{plan:"2026-08-14",act:null,vendor:"ｶﾞﾘﾊﾞｰ"}}}),
   Object.assign(newSite(4,"ﾌｧｰｽﾄｽﾃｰｼﾞ江坂広芝町Ⅱ","301","自社"),{plan:[null,null,null,"2026-08-28",null,null],act:["2026-08-23",null,null,null,null,null],
     mtgTime:"16:00",billTo:"デザイン",furniture:"なし",autolock:"",note:"",moveinClean:{order:null,done:null},keyChange:{order:null,done:null},
-    works:{"リフォーム":{start:"2026-08-25",end:"2026-08-27",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-28",act:null,vendor:"ZERO"}}}),
+    works:{"リフォーム":{start:"2026-08-25",end:"2026-08-27",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-28",act:null,vendor:"ZERO"}}}),
 ];
 let nextId=5;
 let calAnchor=new Date(TODAY);
@@ -204,9 +204,14 @@ let colFilters={ name:null, status:null, vendor:null, category:null,
   phaseRange:[null,null,null,null,null,null], moveinRange:null, keyRange:null };
 
 // 要件5：登録済み現場名・物件マスタのカタカナを半角カナへ一括変換
+const VENDOR_RENAME={"アルファ":"ｱﾙﾌｧ","シャムス":"ｼｬﾑｽ","ガリバー":"ｶﾞﾘﾊﾞｰ"};
+function renameVendor(v){ return v&&VENDOR_RENAME[v]?VENDOR_RENAME[v]:v; }
 function hankakuizeAll(){
-  sites.forEach(s=>{ if(s.name) s.name=toHankakuKana(s.name); });
+  sites.forEach(s=>{ if(s.name) s.name=toHankakuKana(s.name);
+    Object.values(s.works||{}).forEach(wk=>{ if(wk.items){ wk.items.forEach(it=>{ it.vendor=renameVendor(it.vendor); }); } else if(wk.vendor!==undefined){ wk.vendor=renameVendor(wk.vendor); } });
+  });
   buildingMaster=buildingMaster.map(b=>toHankakuKana(b));
+  vendorMaster=[...new Set(vendorMaster.map(renameVendor))];
 }
 function currentPhase(s){let d=0;for(let i=0;i<NPHASE;i++){if(s.act[i])d=i+1;}return d;}
 // 区分ごとに使う工程インデックス（自社は①④⑤=0,3,4のみ）
@@ -732,10 +737,16 @@ function dayKeyAtPoint(x,y){
 }
 
 let DND=null;
-function isPhone(){ return window.matchMedia && window.matchMedia("(max-width:640px)").matches; }
+function isPhone(){
+  // タッチ主体の端末（スマホ/タブレット）はカレンダー内ドラッグ無効・タップのみ。
+  // 幅ではなく入力方式で判定するため、横向きや画面拡大でも判定が外れない。
+  const coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
+  const narrow = window.matchMedia && window.matchMedia("(max-width:640px)").matches;
+  return coarse || narrow;
+}
 function startDrag(el, e, payload){
   // スマホ幅かつカレンダー内のチップは、ドラッグ無効・タップのみ（スクロール誤爆防止）
-  const inCalendar = el.closest && el.closest("#tab-calendar") && el.closest(".daycell");
+  const inCalendar = el.closest && (el.closest(".daycell") || el.closest("#calgrid"));
   if(isPhone() && inCalendar){
     let sx=e.clientX, sy=e.clientY, moved=false;
     const mv=(ev)=>{ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>8) moved=true; };
