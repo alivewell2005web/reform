@@ -92,11 +92,13 @@ table{background:var(--surface-2);}
       <span id="perlabel" style="font-weight:500; min-width:150px; text-align:center;"></span>
       <button id="nextp" aria-label="次へ" style="padding:4px 10px;"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
     </div>
+    <button id="zeroholbtn" style="display:none; font-size:13px;"><i class="ti ti-calendar-off" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> ZERO休み登録</button>
     <button id="pdfbtn" style="font-size:13px;"><i class="ti ti-file-type-pdf" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 業者向けPDF</button>
   </div>
   <div id="legend" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;"></div>
   <div id="calhint" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;"></div>
   <div id="calgrid" style="position:relative; user-select:none; touch-action:none;"></div>
+  <div id="calcolorpicker" style="display:none; margin-top:10px;"></div>
   <div id="unassigned" style="margin-top:14px;"></div>
 </div>
 </div>
@@ -128,6 +130,28 @@ let buildingMaster=["Gran Bridge Dempo","ウェルホームズ中之島北","ネ
 // 工事種別ごとのデフォルト担当業者
 const DEFAULT_VENDOR={"リフォーム":"アルファ","クリーニング":"ZERO","設備交換":"大松","リペア":"シャムス","畳・ふすま":"森上","設備廃棄":"ガリバー","その他":null};
 
+// 立会者の選択肢（①退去立会）
+const ATTENDEES=["鵜飼","野間元","秀島","西谷","森","現調"];
+// アルファ＆ZERO 複合フィルタ用の特殊値
+const VENDOR_AZ="__alpha_zero__";
+const AZ_VENDORS=["アルファ","ZERO"];
+// ZEROクリーニングの請求先別の色（ZEROのみ絞り込み時に適用）
+const ZERO_BILL_COLOR={"ウエル":{bg:"#BAE6FD",done:"#0EA5E9",fg:"#075985"},"デザイン":{bg:"#FBCFE8",done:"#EC4899",fg:"#9D174D"},"レジデンシャル":WORKCOLOR["クリーニング"]};
+// 要件6：1社絞り込み時に使えるカスタム色パレット
+const CAL_PALETTE=[
+  {name:"青",   bg:"#60A5FA",done:"#2563EB",fg:"#FFFFFF"},
+  {name:"緑",   bg:"#34D399",done:"#059669",fg:"#FFFFFF"},
+  {name:"黄",   bg:"#FBBF24",done:"#D97706",fg:"#78350F"},
+  {name:"桃",   bg:"#F472B6",done:"#DB2777",fg:"#FFFFFF"},
+  {name:"紫",   bg:"#A78BFA",done:"#7C3AED",fg:"#FFFFFF"},
+  {name:"水",   bg:"#22D3EE",done:"#0891B2",fg:"#083344"},
+  {name:"橙",   bg:"#FB923C",done:"#EA580C",fg:"#FFFFFF"},
+  {name:"赤",   bg:"#F87171",done:"#DC2626",fg:"#FFFFFF"},
+];
+// 全角カタカナ→半角カナ変換
+const KANA_MAP={"ガ":"ｶﾞ","ギ":"ｷﾞ","グ":"ｸﾞ","ゲ":"ｹﾞ","ゴ":"ｺﾞ","ザ":"ｻﾞ","ジ":"ｼﾞ","ズ":"ｽﾞ","ゼ":"ｾﾞ","ゾ":"ｿﾞ","ダ":"ﾀﾞ","ヂ":"ﾁﾞ","ヅ":"ﾂﾞ","デ":"ﾃﾞ","ド":"ﾄﾞ","バ":"ﾊﾞ","ビ":"ﾋﾞ","ブ":"ﾌﾞ","ベ":"ﾍﾞ","ボ":"ﾎﾞ","パ":"ﾊﾟ","ピ":"ﾋﾟ","プ":"ﾌﾟ","ペ":"ﾍﾟ","ポ":"ﾎﾟ","ヴ":"ｳﾞ","ア":"ｱ","イ":"ｲ","ウ":"ｳ","エ":"ｴ","オ":"ｵ","カ":"ｶ","キ":"ｷ","ク":"ｸ","ケ":"ｹ","コ":"ｺ","サ":"ｻ","シ":"ｼ","ス":"ｽ","セ":"ｾ","ソ":"ｿ","タ":"ﾀ","チ":"ﾁ","ツ":"ﾂ","テ":"ﾃ","ト":"ﾄ","ナ":"ﾅ","ニ":"ﾆ","ヌ":"ﾇ","ネ":"ﾈ","ノ":"ﾉ","ハ":"ﾊ","ヒ":"ﾋ","フ":"ﾌ","ヘ":"ﾍ","ホ":"ﾎ","マ":"ﾏ","ミ":"ﾐ","ム":"ﾑ","メ":"ﾒ","モ":"ﾓ","ヤ":"ﾔ","ユ":"ﾕ","ヨ":"ﾖ","ラ":"ﾗ","リ":"ﾘ","ル":"ﾙ","レ":"ﾚ","ロ":"ﾛ","ワ":"ﾜ","ヲ":"ｦ","ン":"ﾝ","ァ":"ｧ","ィ":"ｨ","ゥ":"ｩ","ェ":"ｪ","ォ":"ｫ","ャ":"ｬ","ュ":"ｭ","ョ":"ｮ","ッ":"ｯ","ー":"ｰ","、":"､","。":"｡","・":"･","「":"｢","」":"｣","　":" "};
+function toHankakuKana(str){ return String(str==null?"":str).replace(/[ァ-ヶ　、-〜「」・ー]/g, c=>KANA_MAP[c]||c); }
+
 const TODAY=new Date(); TODAY.setHours(0,0,0,0);
 function todayKey(){ return iso(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()); }
 
@@ -140,17 +164,22 @@ const HOLIDAYS={
 function holidayName(key){ return HOLIDAYS[key]||null; }
 
 function newSite(id,name,room,category){return {id,name,room,category:category||"三井",plan:[null,null,null,null,null,null],act:[null,null,null,null,null,null],works:{},open:false,
-  mtgTime:null,                        // 退去立会の時刻（hh:mm）
+  mtgTime:null,                        // 退去立会の開始時刻（hh:mm）
+  mtgEndTime:null,                     // 退去立会の終了時刻（hh:mm、幅がある場合のみ）
+  attendee:null,                       // 立会者（鵜飼/野間元/秀島/西谷/森/現調）
   moveinClean:{order:null,done:null},  // 入居前清掃（発注/実施）
   keyChange:{order:null,done:null},    // 鍵交換（発注/実施）
   billTo:"デザイン",     // 請求先（デザイン/ウエル/レジデンシャル）
   furniture:"なし",      // 家具有無（あり/なし）
   autolock:"",           // オートロック（呼5100 / ※1234呼 / フリー入力）
-  note:"" };}            // 備考（当社/オープン/電気メーター/水道メーター/南京5100 / フリー入力）
+  note:"",             // 備考（当社/オープン/電気メーター/水道メーター/南京5100 / フリー入力）
+  memo:"" };}          // 進捗表右端のフリーメモ
 const BILL_OPTS=["デザイン","ウエル","レジデンシャル"];
 const FURN_OPTS=["なし","あり"];
 const AUTOLOCK_PRESETS=["呼5100","※1234呼"];   // 加えてフリー入力（空欄デフォルト）
 const NOTE_PRESETS=["当社","オープン","電気メーター","水道メーター","南京5100"]; // 加えてフリー入力（空欄デフォルト）
+// ZERO（クリーニング業者）の休業日。日付キー("YYYY-MM-DD")のSet。現場名/ZERO/アルファ&ZERO 絞り込み時にカレンダー表示。
+let zeroHolidays=new Set();
 let sites=[
   Object.assign(newSite(1,"パークアクシスうつぼ公園","803","三井"),{plan:["2026-08-05","2026-08-07","2026-08-10","2026-08-12","2026-08-20","2026-08-28"],act:["2026-08-01","2026-08-03","2026-08-05",null,null,null],
     mtgTime:"10:00",billTo:"デザイン",furniture:"なし",autolock:"呼5100",note:"当社",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-15",done:"2026-08-17"},
@@ -174,6 +203,11 @@ let sortKey="phase"; // phase | name | date1
 let colFilters={ name:null, status:null, vendor:null, category:null,
   phaseRange:[null,null,null,null,null,null], moveinRange:null, keyRange:null };
 
+// 要件5：登録済み現場名・物件マスタのカタカナを半角カナへ一括変換
+function hankakuizeAll(){
+  sites.forEach(s=>{ if(s.name) s.name=toHankakuKana(s.name); });
+  buildingMaster=buildingMaster.map(b=>toHankakuKana(b));
+}
 function currentPhase(s){let d=0;for(let i=0;i<NPHASE;i++){if(s.act[i])d=i+1;}return d;}
 // 区分ごとに使う工程インデックス（自社は①④⑤=0,3,4のみ）
 function activePhases(s){ return s.category==="自社" ? [0,3,4] : [0,1,2,3,4,5]; }
@@ -185,6 +219,8 @@ function isComplete(s){
   if(s.category==="自社") return !!s.act[4];
   return currentPhase(s)>=NPHASE && !!(s.keyChange && s.keyChange.done);
 }
+// 立会時刻の表示（開始のみ or 開始〜終了）
+function mtgTimeLabel(s){ if(!s.mtgTime) return ''; return s.mtgEndTime ? `${s.mtgTime}〜${s.mtgEndTime}` : s.mtgTime; }
 function fmt(d){if(!d)return null;const p=d.split("-");return `${parseInt(p[1])}/${parseInt(p[2])}`;}
 function iso(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;}
 function parseISO(key){const p=key.split("-");return new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));}
@@ -284,7 +320,7 @@ function renderHead(){
     <th style="padding:9px 10px; text-align:left; min-width:186px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
     <th style="padding:9px 6px; text-align:left; min-width:92px; border-right:0.5px solid var(--border); font-size:13px;">現在地${filterIcon("status")}</th>
     ${PHASES.map((p,idx)=>{const nm=p.slice(1).replace("・工程管理","<br>・工程管理").replace("・請求書発行","<br>・請求書発行"); return `<th style="padding:8px 4px; text-align:center; min-width:72px; font-weight:400; font-size:13px;">${p.slice(0,1)}${filterIcon("phase"+idx)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${nm}</div></th>`;}).join("")}
-    ${extraTh}</tr>`;
+    ${extraTh}<th style="padding:9px 10px; text-align:left; min-width:140px; border-left:0.5px solid var(--border); font-size:13px;">メモ</th></tr>`;
   document.querySelectorAll("[data-colfilter]").forEach(el=>el.addEventListener("click",(e)=>{ e.stopPropagation(); openColFilter(el.dataset.colfilter, el); }));
 }
 // 入居前清掃・鍵交換セル（発注/実施の2段、横に日付）
@@ -304,13 +340,15 @@ function cellHtml(s,i){
     return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border);">
       <div title="工事の最終日を自動反映" style="font-size:13px;">${plan?`<span style="color:var(--text-secondary);">${plan}</span>`:'<span style="color:var(--text-muted);">自動</span>'}<i class="ti ti-refresh" aria-hidden="true" style="font-size:10px; vertical-align:0; margin-left:2px; color:var(--text-muted);"></i></div></td>`;
   }
-  // ①(i=0) 退去立会：日付＋時刻(hh:mm)。日付未入力は「未定」
+  // ①(i=0) 退去立会：日付＋時刻(hh:mm、幅可)＋立会者。日付未入力は「未定」
   if(i===0){
     const bg0 = act ? 'background:var(--bg-success);' : '';
-    const timeStr = s.mtgTime || '';
+    const timeStr = mtgTimeLabel(s);
+    const att = s.attendee || '';
     return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); ${bg0}">
       <div data-edit="${s.id}:0:act" style="cursor:pointer; font-size:13px;">${act?`<span style="color:var(--text-success); font-weight:500;">${act}</span>`:'<span style="color:var(--text-muted);">未定</span>'}</div>
-      <div data-mtgtime="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${timeStr?`<span style="color:var(--text-secondary);"><i class="ti ti-clock" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${timeStr}</span>`:'<span style="color:var(--text-muted);">時刻</span>'}</div></td>`;
+      <div data-mtgtime="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${timeStr?`<span style="color:var(--text-secondary);"><i class="ti ti-clock" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${timeStr}</span>`:'<span style="color:var(--text-muted);">時刻</span>'}</div>
+      <div data-attendee="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${att?`<span style="color:var(--text-secondary);"><i class="ti ti-user" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${att}</span>`:'<span style="color:var(--text-muted);">立会者</span>'}</div></td>`;
   }
   // ⑤(i=4) 完了チェック：単日。工事最終日より前なら警告背景
   let bg = filled?'background:var(--bg-success);':'';
@@ -392,7 +430,7 @@ function renderBody(){
   document.querySelectorAll(".sortbtn").forEach(b=>{ const on=b.dataset.sort===sortKey;
     b.style.background=on?"var(--text-accent)":"var(--surface-2)"; b.style.color=on?"#fff":"var(--text-primary)"; b.style.fontWeight=on?"600":"400"; });
   const tb=document.getElementById("tbody");
-  if(rows.length===0){tb.innerHTML=`<tr><td colspan="13" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; renderDetail(sites.find(s=>s.open)||null); updateFilterClearBtn(); return;}
+  if(rows.length===0){tb.innerHTML=`<tr><td colspan="14" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; renderDetail(sites.find(s=>s.open)||null); updateFilterClearBtn(); return;}
   tb.innerHTML=rows.map(s=>{
     const cp=currentPhase(s);
     const sl=statusLabel(s);
@@ -416,15 +454,18 @@ function renderBody(){
           <button data-sitedel="${s.id}" title="この現場を削除" style="flex:none; font-size:11px; padding:2px 7px; color:var(--text-danger); border-color:var(--border);"><i class="ti ti-trash" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
         </div></td>
       <td style="padding:8px 8px; border-right:0.5px solid var(--border);">${status}</td>
-      ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}</tr>`;
+      ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}<td style="padding:5px 6px; border-left:0.5px solid var(--border); vertical-align:top;"><textarea data-memo="${s.id}" rows="2" placeholder="メモ" style="width:130px; box-sizing:border-box; font-size:12px; padding:3px 5px; resize:vertical; min-height:32px;">${(s.memo||"").replace(/</g,"&lt;")}</textarea></td></tr>`;
   }).join("");
   tb.querySelectorAll("[data-toggle]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.toggle)); if(s){const was=s.open; sites.forEach(x=>x.open=false); s.open=!was; refresh();}}));
   tb.querySelectorAll("[data-siteedit]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); openEditSiteModal(Number(el.dataset.siteedit));}));
   tb.querySelectorAll("[data-sitedel]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); const id=Number(el.dataset.sitedel); const s=sites.find(x=>x.id===id); if(!s)return; if(confirm(`「${s.name} ${s.room}号室」を削除します。工事内訳や金額など、この現場の全データが消えます。よろしいですか？`)){ sites=sites.filter(x=>x.id!==id); refresh(); }}));
   tb.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>{const [id,idx,kind]=el.dataset.edit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return; const i=Number(idx);
-    if(i===0){ openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{s.act[0]=dv; s.mtgTime=tv; refresh();}); return; }
+    if(i===0){ openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh();},s.mtgEndTime,s.attendee); return; }
     openDateInline(el,s[kind][i],(v)=>{s[kind][i]=v; refresh();});}));
-  tb.querySelectorAll("[data-mtgtime]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.mtgtime)); if(!s)return; openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{s.act[0]=dv; s.mtgTime=tv; refresh();});}));
+  const openMtg=(s,el)=>openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh();},s.mtgEndTime,s.attendee);
+  tb.querySelectorAll("[data-mtgtime]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.mtgtime)); if(s)openMtg(s,el);}));
+  tb.querySelectorAll("[data-attendee]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.attendee)); if(s)openMtg(s,el);}));
+  tb.querySelectorAll("textarea[data-memo]").forEach(el=>el.addEventListener("input",()=>{const s=sites.find(x=>x.id===Number(el.dataset.memo)); if(s){s.memo=el.value; dirty=true; scheduleAutoSave();}}));
   tb.querySelectorAll("[data-xedit]").forEach(el=>el.addEventListener("click",()=>{const [id,field,k]=el.dataset.xedit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return;
     // 鍵交換の実施日は④予定日(plan[3])より後のみ許可
     let opts={};
@@ -579,6 +620,21 @@ function daysInPeriod(){
   return Array.from({length:days},(_,i)=>new Date(y,m,i+1));
 }
 function sitematch(s){ return calSite==="all"||s.id===Number(calSite); }
+// カレンダーの業者フィルタ判定（all / アルファ&ZERO複合 / 単一業者）
+function vendorMatch(v){ if(calVendor==="all") return true; if(calVendor===VENDOR_AZ) return AZ_VENDORS.includes(v); return v===calVendor; }
+// 業者フィルタが「特定業者に絞られている」か（all以外＝立会/清掃/鍵の非業者チップは出さない、の判定に使用）
+function vendorFiltered(){ return calVendor!=="all"; }
+// 単一業者に絞り込み中か（要件6：色変更UIを出す条件。アルファ&ZEROは対象外）
+function singleVendorFilter(){ return calVendor!=="all" && calVendor!==VENDOR_AZ; }
+// ZERO休みをカレンダー表示すべきか（現場名 / ZERO / アルファ&ZERO 絞り込み時）
+function showZeroHolidays(){ return calSite!=="all" || calVendor==="ZERO" || calVendor===VENDOR_AZ; }
+// 要件6：クリック対象の予定に付いたカスタム色を、単一業者絞り込み時のみ適用。無ければ工事色（ZEROクリーニングは請求先色）
+function effColor(work,site,customColor){
+  if(singleVendorFilter() && customColor) return customColor;
+  // 要件1②：ZEROのみ絞り込み時、クリーニングは請求先で色分け
+  if(calVendor==="ZERO" && work==="クリーニング"){ return ZERO_BILL_COLOR[site.billTo]||WORKCOLOR["クリーニング"]; }
+  return WORKCOLOR[work];
+}
 // 現在のカレンダー表示期間内に、表示対象の予定が1件以上ある現場（完了分含む）を返す。
 // 工事フィルタ・業者フィルタは考慮するが、現場フィルタ自体は無視（選択肢生成用）。
 function sitesInView(){
@@ -586,7 +642,6 @@ function sitesInView(){
   const first=iso(days[0].getFullYear(),days[0].getMonth(),days[0].getDate());
   const last=iso(days[days.length-1].getFullYear(),days[days.length-1].getMonth(),days[days.length-1].getDate());
   const inRange=(a,b)=>{ if(!a)return false; const bb=b||a; return a<=last && bb>=first; };
-  const vAll = calVendor==="all";
   const wantWork=(w)=> calWork==="all"||calWork===w;
   const wantMtg = calWork==="all"||calWork===EXTRA_MTG.key;
   const wantMovein = calWork==="all"||calWork===EXTRA_MOVEIN.key;
@@ -596,12 +651,12 @@ function sitesInView(){
     let hit=false;
     // 工事
     Object.keys(s.works).forEach(w=>{ if(hit||!wantWork(w))return; const t=WORKDEF[w].type, wk=s.works[w];
-      if(t==="span"){ if((vAll||wk.vendor===calVendor)&&inRange(wk.start,wk.end)) hit=true; }
-      else if(t==="single"){ if((vAll||wk.vendor===calVendor)&&inRange(wk.plan,null)) hit=true; }
-      else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if((vAll||it.vendor===calVendor)&&inRange(it.plan,null)) hit=true; }); }
+      if(t==="span"){ if(vendorMatch(wk.vendor)&&inRange(wk.start,wk.end)) hit=true; }
+      else if(t==="single"){ if(vendorMatch(wk.vendor)&&inRange(wk.plan,null)) hit=true; }
+      else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(vendorMatch(it.vendor)&&inRange(it.plan,null)) hit=true; }); }
     });
     // 立会・入居前清掃・鍵交換（業者フィルタ時は対象外）
-    if(!hit && vAll){
+    if(!hit && !vendorFiltered()){
       if(wantMtg && inRange(s.act[0],null)) hit=true;
       else if(wantMovein && inRange(s.moveinClean.done,null)) hit=true;
       else if(wantKey && inRange(s.keyChange.done,null)) hit=true;
@@ -611,17 +666,17 @@ function sitesInView(){
   return out;
 }
 function collectSpans(){
-  const vmatch=(v)=> calVendor==="all"||v===calVendor, wmatch=(w)=> calWork==="all"||w===calWork;
+  const wmatch=(w)=> calWork==="all"||w===calWork;
   let e=[];
-  sites.forEach(s=>{ if(!sitematch(s))return; Object.keys(s.works).forEach(w=>{ if(!wmatch(w))return; if(WORKDEF[w].type!=="span")return; const wk=s.works[w]; if(wk.start&&wk.end&&vmatch(wk.vendor)) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act});});});
+  sites.forEach(s=>{ if(!sitematch(s))return; Object.keys(s.works).forEach(w=>{ if(!wmatch(w))return; if(WORKDEF[w].type!=="span")return; const wk=s.works[w]; if(wk.start&&wk.end&&vendorMatch(wk.vendor)) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act,color:wk.calColor||null,ref:{kind:"span",id:s.id,w}});});});
   return e;
 }
 function singlesOnDay(key){
-  const vmatch=(v)=> calVendor==="all"||v===calVendor, wmatch=(w)=> calWork==="all"||w===calWork;
+  const wmatch=(w)=> calWork==="all"||w===calWork;
   let out=[];
   sites.forEach(s=>{ if(!sitematch(s))return; Object.keys(s.works).forEach(w=>{ if(!wmatch(w))return; const t=WORKDEF[w].type, wk=s.works[w];
-    if(t==="multi"){ (wk.items||[]).forEach((it,ix)=>{ if(it.plan===key&&vmatch(it.vendor)) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act,ref:{kind:"multi",id:s.id,w,ix}}); }); }
-    else if(t==="single"){ if(wk.plan===key&&vmatch(wk.vendor)) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act,ref:{kind:"single",id:s.id,w}}); }
+    if(t==="multi"){ (wk.items||[]).forEach((it,ix)=>{ if(it.plan===key&&vendorMatch(it.vendor)) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act,color:it.calColor||null,ref:{kind:"multi",id:s.id,w,ix}}); }); }
+    else if(t==="single"){ if(wk.plan===key&&vendorMatch(wk.vendor)) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act,color:wk.calColor||null,ref:{kind:"single",id:s.id,w}}); }
   });});
   return out;
 }
@@ -630,17 +685,17 @@ function extraChipsOnDay(key){
   let out=[];
   const wantAll = calWork==="all";
   sites.forEach(s=>{ if(!sitematch(s))return;
-    if((wantAll||calWork===EXTRA_MTG.key) && s.act[0]===key) out.push({kind:"mtg",site:s,color:EXTRA_MTG.color,abbr:EXTRA_MTG.abbr,time:s.mtgTime});
+    if((wantAll||calWork===EXTRA_MTG.key) && s.act[0]===key) out.push({kind:"mtg",site:s,color:EXTRA_MTG.color,abbr:EXTRA_MTG.abbr,time:mtgTimeLabel(s)});
     if((wantAll||calWork===EXTRA_MOVEIN.key) && s.moveinClean.done===key) out.push({kind:"movein",site:s,color:EXTRA_MOVEIN.color,abbr:EXTRA_MOVEIN.abbr});
     if((wantAll||calWork===EXTRA_KEY.key) && s.keyChange.done===key) out.push({kind:"key",site:s,color:EXTRA_KEY.color,abbr:EXTRA_KEY.abbr});
   });
   // 1現場に絞ったとき（かつ工事フィルタ=すべて）は、②③⑤⑥の工程日も工程名付きで表示（実績優先、なければ予定）
-  if(calSite!=="all" && calVendor==="all" && wantAll){
+  if(calSite!=="all" && !vendorFiltered() && wantAll){
     const s=sites.find(x=>String(x.id)===String(calSite));
     if(s){ [1,2,4,5].forEach(i=>{ if(!isPhaseActive(s,i))return; const dt=s.act[i]||s.plan[i]; if(dt===key){ out.push({kind:"phase",site:s,phaseIdx:i,color:PHASE_MILESTONE_COLOR,abbr:PHASES[i].slice(1)}); } }); }
   }
   // 業者フィルタが特定業者のときは工事に業者が無いこれらは出さない
-  if(calVendor!=="all") return [];
+  if(vendorFiltered()) return [];
   return out;
 }
 function extraChipLabel(e){ const t=e.time?` ${e.time}`:''; return calSite!=="all" ? `[${e.abbr}]${t}` : `[${e.abbr}]${siteLabel(e.site)}${t}`; }
@@ -659,7 +714,13 @@ function renderLegend(){
                     : w===EXTRA_KEY.key    ? {bg:EXTRA_KEY.color.done,fg:EXTRA_KEY.color.fg}
                     : WORKCOLOR[w];
   const shown = calWork==="all" ? WORKS : [calWork];
-  lg.innerHTML=shown.map(w=>{const c=colorOf(w); if(!c) return ""; return `<span style="font-size:11px; display:inline-flex; align-items:center; gap:4px;"><span style="width:12px; height:12px; border-radius:3px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("");
+  let html=shown.map(w=>{const c=colorOf(w); if(!c) return ""; return `<span style="font-size:11px; display:inline-flex; align-items:center; gap:4px;"><span style="width:12px; height:12px; border-radius:3px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("");
+  // 要件1②：ZEROのみ絞り込み時、クリーニングは請求先で色分け
+  if(calVendor==="ZERO" && (calWork==="all"||calWork==="クリーニング")){
+    html+=`<span style="font-size:11px; color:var(--text-muted); margin-left:6px;">清掃色＝請求先：</span>`+
+      Object.keys(ZERO_BILL_COLOR).map(b=>{const c=ZERO_BILL_COLOR[b]; return `<span style="font-size:11px; display:inline-flex; align-items:center; gap:4px;"><span style="width:12px; height:12px; border-radius:3px; background:${c.done}; border:1px solid ${c.fg};"></span>${b}</span>`;}).join("");
+  }
+  lg.innerHTML=html;
 }
 
 function dayKeyAtPoint(x,y){
@@ -749,8 +810,10 @@ function renderCalendar(){
   if(!sel.dataset.init){sel.innerHTML=`<option value="all">すべての工事</option>`+WORKS.map(w=>`<option value="${w}"${w===calWork?' selected':''}>${w}</option>`).join("")+`<option value="${EXTRA_MTG.key}"${calWork===EXTRA_MTG.key?' selected':''}>${EXTRA_MTG.key}</option><option value="${EXTRA_MOVEIN.key}"${calWork===EXTRA_MOVEIN.key?' selected':''}>${EXTRA_MOVEIN.key}</option><option value="${EXTRA_KEY.key}"${calWork===EXTRA_KEY.key?' selected':''}>${EXTRA_KEY.key}</option>`; sel.dataset.init="1";}
   const vsel=document.getElementById("vendorsel");
   const vlist=allVendorsInUse();
-  if(calVendor!=="all"&&!vlist.includes(calVendor)) calVendor="all";
-  vsel.innerHTML=`<option value="all">全業者</option>`+vlist.map(v=>`<option value="${v}"${v===calVendor?' selected':''}>${v}</option>`).join("");
+  if(calVendor!=="all"&&calVendor!==VENDOR_AZ&&!vlist.includes(calVendor)) calVendor="all";
+  const azOpt=`<option value="${VENDOR_AZ}"${calVendor===VENDOR_AZ?' selected':''}>アルファ＆ZERO</option>`;
+  vsel.innerHTML=`<option value="all">全業者</option>`+azOpt+vlist.map(v=>`<option value="${v}"${v===calVendor?' selected':''}>${v}</option>`).join("");
+  const zhb=document.getElementById("zeroholbtn"); if(zhb) zhb.style.display=showZeroHolidays()?"inline-flex":"none";
   renderLegend();
 
   const isExtraFilter = (calWork===EXTRA_MTG.key||calWork===EXTRA_MOVEIN.key||calWork===EXTRA_KEY.key);
@@ -796,12 +859,14 @@ function renderCalendar(){
       const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey);
       const hol=holidayName(k);
       const singles=singlesOnDay(k);
-      const chips=singles.map((e,i)=>`<div class="chip" data-chipkey="${k}__${i}" title="${labelText(e)}" style="cursor:grab; touch-action:none; ${`background:${e.done?WORKCOLOR[e.work].done:WORKCOLOR[e.work].bg}; color:${WORKCOLOR[e.work].fg};`} font-size:10px; line-height:1.25; padding:2px 5px; margin-top:2px; border-radius:5px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`).join("");
+      const chips=singles.map((e,i)=>{const c=effColor(e.work,e.site,e.color); return `<div class="chip" data-chipkey="${k}__${i}" title="${labelText(e)}" style="cursor:grab; touch-action:none; background:${e.done?c.done:c.bg}; color:${c.fg}; font-size:10px; line-height:1.25; padding:2px 5px; margin-top:2px; border-radius:5px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`;}).join("");
       const extras=extraChipsOnDay(k);
       const extraChips=extras.map((e,i)=>`<div class="xchip" data-xchipkey="${k}__${i}" title="${extraChipLabel(e)}（実施）" style="cursor:grab; touch-action:none; background:${e.color.done}; color:#fff; font-size:10px; line-height:1.25; padding:2px 5px; margin-top:2px; border-radius:5px; white-space:normal; word-break:break-word; border:1px solid ${e.color.fg};">${extraChipLabel(e)}</div>`).join("");
+      const isZeroHol = showZeroHolidays() && zeroHolidays.has(k);
       const dnumColor = isToday?'var(--text-accent)':(hol?'var(--text-danger)':(dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-secondary)'));
-      const cellBg = isToday?'var(--bg-accent-muted)':(hol?'#f8d7d7':'var(--surface-2)');
-      const holLabel = hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
+      const cellBg = isToday?'var(--bg-accent-muted)':(hol?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
+      const holLabel = (hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'')
+        +(isZeroHol?`<div title="ZERO休み" style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.1; margin-top:1px;">ZERO休み</div>`:'');
       cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
         <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getDate()}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
         <div style="height:${spanAreaH}px;"></div>${chips}${extraChips}</div>`;
@@ -816,7 +881,7 @@ function renderCalendar(){
       if(fc<0) return;
       const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+e.slot*(ROW+GAP);
       const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
-      const c=WORKCOLOR[e.work], bg=e.done?c.done:c.bg, fg=c.fg;
+      const c=effColor(e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
       const radius=`${startsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${startsHere?'6px':'2px'}`;
       overlay+=`<div class="span" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500;">${labelText(e)}</div>`;
     });
@@ -829,13 +894,13 @@ function renderCalendar(){
 
   grid.querySelectorAll(".span").forEach(el=>{
     const [id,w]=el.dataset.spankey.split("__");
-    const s=sites.find(x=>x.id===Number(id)); const wk=s.works[w]; const c=WORKCOLOR[w];
-    el.addEventListener("pointerdown",(e)=>{ if(!isPhone()){ e.preventDefault(); e.stopPropagation(); } startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>openSpanEditor(s,w)}); });
+    const s=sites.find(x=>x.id===Number(id)); const wk=s.works[w]; const c=effColor(w,s,wk.calColor);
+    el.addEventListener("pointerdown",(e)=>{ if(!isPhone()){ e.preventDefault(); e.stopPropagation(); } startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>{ openSpanEditor(s,w); if(singleVendorFilter()) showColorPicker({kind:"span",id:Number(id),w}); }}); });
   });
   grid.querySelectorAll(".chip").forEach(el=>{
     const [k,idx]=el.dataset.chipkey.split("__");
-    const list=singlesOnDay(k); const e=list[Number(idx)]; if(!e) return; const c=WORKCOLOR[e.work];
-    el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); }}); });
+    const list=singlesOnDay(k); const e=list[Number(idx)]; if(!e) return; const c=effColor(e.work,e.site,e.color);
+    el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); if(singleVendorFilter()) showColorPicker(e.ref); }}); });
   });
   grid.querySelectorAll(".xchip").forEach(el=>{
     const [k,idx]=el.dataset.xchipkey.split("__");
@@ -843,7 +908,7 @@ function renderCalendar(){
     if(e.kind==="mtg"){
       el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"mtg",id:e.site.id,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
         const s=sites.find(x=>x.id===e.site.id);
-        openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{ s.act[0]=dv; s.mtgTime=tv; refresh(); });
+        openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{ s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh(); },s.mtgEndTime,s.attendee);
       }}); });
       return;
     }
@@ -866,11 +931,47 @@ function renderCalendar(){
   });
 
   renderUnassigned();
+  // 色ピッカーの再評価（絞り込みが単一業者でなくなったら隠す）
+  const cp=document.getElementById("calcolorpicker");
+  if(cp){ if(colorTargetRef && singleVendorFilter() && refByTarget(colorTargetRef)) showColorPicker(colorTargetRef); else { cp.style.display="none"; colorTargetRef=null; } }
+}
+
+// 要件6：単一業者絞り込み時に、クリックした予定の表示色を変更するパネル
+let colorTargetRef=null;
+function refByTarget(ref){
+  const s=sites.find(x=>x.id===ref.id); if(!s) return null;
+  if(ref.kind==="multi"){ const it=(s.works[ref.w].items||[])[ref.ix]; return it?{obj:it,site:s,work:ref.w}:null; }
+  const wk=s.works[ref.w]; return wk?{obj:wk,site:s,work:ref.w}:null;
+}
+function showColorPicker(ref){
+  const box=document.getElementById("calcolorpicker"); if(!box) return;
+  if(!singleVendorFilter()){ box.style.display="none"; colorTargetRef=null; return; }
+  const t=refByTarget(ref); if(!t){ box.style.display="none"; return; }
+  colorTargetRef=ref;
+  const cur=t.obj.calColor||null;
+  const label=`[${WORKABBR[t.work]}]${t.site.name} ${t.site.room}`;
+  const sw=CAL_PALETTE.map(p=>{
+    const on = cur && cur.done===p.done;
+    return `<button data-cc="${p.done}" title="${p.name}" style="width:26px; height:26px; border-radius:6px; background:${p.bg}; border:2px solid ${on?p.fg:'transparent'}; cursor:pointer; padding:0;"></button>`;
+  }).join("");
+  box.style.display="block";
+  box.innerHTML=`<div style="background:var(--surface-1); border:0.5px solid var(--border); border-radius:10px; padding:10px 12px;">
+    <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">表示色を変更（${label}）<span style="color:var(--text-muted);">※この業者に絞り込んだ時だけ反映</span></div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${sw}
+      <button id="ccreset" style="font-size:11px; padding:4px 10px; margin-left:6px;">標準色に戻す</button>
+      <button id="ccclose" style="font-size:11px; padding:4px 10px; margin-left:auto;">閉じる</button>
+    </div></div>`;
+  box.querySelectorAll("[data-cc]").forEach(el=>el.addEventListener("click",()=>{
+    const p=CAL_PALETTE.find(x=>x.done===el.dataset.cc); const t2=refByTarget(colorTargetRef); if(!t2||!p) return;
+    t2.obj.calColor={bg:p.bg,done:p.done,fg:p.fg}; refresh(); showColorPicker(colorTargetRef);
+  }));
+  box.querySelector("#ccreset").onclick=()=>{ const t2=refByTarget(colorTargetRef); if(t2){ delete t2.obj.calColor; refresh(); showColorPicker(colorTargetRef); } };
+  box.querySelector("#ccclose").onclick=()=>{ box.style.display="none"; colorTargetRef=null; };
 }
 
 function renderUnassigned(){
   const ua=document.getElementById("unassigned");
-  const vmatch=(v)=>calVendor==="all"||v===calVendor;
+  const vmatch=(v)=>vendorMatch(v);
   // 入居前清掃・鍵交換は工事(WORKDEF)ではないため未手配リストの対象外
   const isExtra = (calWork===EXTRA_MTG.key||calWork===EXTRA_MOVEIN.key||calWork===EXTRA_KEY.key);
   if(isExtra){ ua.innerHTML=`<div style="font-size:12px; color:var(--text-muted);">${calWork}の実施日は工事進捗管理表で入力します（発注・実施）。</div>`; return; }
@@ -967,24 +1068,44 @@ function timeOptionsHtml(cur){
     MTG_MINUTES.map(v=>`<option value="${v}"${v===cm?' selected':''}>${v}</option>`).join("")+`</select>`;
   return `${h}<span style="align-self:center;">:</span>${m}`;
 }
-// 日付と時刻を同時に編集する小ポップアップ（退去立会用。時刻はプリセット選択）
-function openDateTimeInline(anchorEl,curDate,curTime,cb){
+// 時刻セレクト（id接頭辞付き）。開始/終了で使い回す
+function timeOptionsHtmlId(prefix,cur){
+  const [ch,cm]=(cur||"").split(":");
+  let h=`<select id="${prefix}h" style="font-size:13px; padding:3px 4px;"><option value="">--</option>`+
+    MTG_HOURS.map(x=>{const v=String(x).padStart(2,"0"); return `<option value="${v}"${v===ch?' selected':''}>${v}</option>`;}).join("")+`</select>`;
+  let m=`<select id="${prefix}m" style="font-size:13px; padding:3px 4px;"><option value="">--</option>`+
+    MTG_MINUTES.map(v=>`<option value="${v}"${v===cm?' selected':''}>${v}</option>`).join("")+`</select>`;
+  return `${h}<span style="align-self:center;">:</span>${m}`;
+}
+// 日付＋時刻(開始/終了)＋立会者を編集する小ポップアップ（退去立会用）
+function openDateTimeInline(anchorEl,curDate,curTime,cb,curEndTime,curAttendee){
   const old=document.getElementById("inlinedt"); if(old) old.remove();
   const box=document.createElement("div");
   box.id="inlinedt";
-  box.style.cssText="position:fixed; z-index:10000; display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); box-shadow:0 4px 14px rgba(0,0,0,.15);";
-  box.innerHTML=`<label style="font-size:11px; color:var(--text-secondary);">日付<br><input type="date" id="dtd" value="${curDate||''}" style="width:160px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;"></label>
-    <div style="font-size:11px; color:var(--text-secondary);">時刻<br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtml(curTime)}</div></div>
+  box.style.cssText="position:fixed; z-index:10000; display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); box-shadow:0 4px 14px rgba(0,0,0,.15);";
+  const attOpts=`<option value="">--</option>`+ATTENDEES.map(a=>`<option value="${a}"${a===(curAttendee||'')?' selected':''}>${a}</option>`).join("");
+  box.innerHTML=`<label style="font-size:11px; color:var(--text-secondary);">日付<br><input type="date" id="dtd" value="${curDate||''}" style="width:170px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;"></label>
+    <div style="font-size:11px; color:var(--text-secondary);">開始時刻<br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtmlId("dts",curTime)}</div></div>
+    <div style="font-size:11px; color:var(--text-secondary);">終了時刻<span style="color:var(--text-muted);">（幅がある場合のみ）</span><br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtmlId("dte",curEndTime)}</div></div>
+    <label style="font-size:11px; color:var(--text-secondary);">立会者<br><select id="dtatt" style="width:170px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;">${attOpts}</select></label>
     <div style="display:flex; gap:6px; justify-content:flex-end;"><button id="dtok" style="font-size:12px; padding:3px 12px;">確定</button></div>`;
   document.body.appendChild(box);
   const r=anchorEl.getBoundingClientRect();
+  const bw=200, bh=box.offsetHeight||250;
   let left=r.left, top=r.bottom+4;
-  if(left+200>window.innerWidth-6) left=window.innerWidth-6-200;
+  if(left+bw>window.innerWidth-6) left=window.innerWidth-6-bw;
   if(left<6) left=6;
-  if(top+150>window.innerHeight-6) top=Math.max(6, r.top-150);
-  box.style.left=left+"px"; box.style.top=top+"px";
+  if(top+bh>window.innerHeight-6) top=Math.max(6, r.top-bh-4);
+  box.style.left=left+"px"; box.style.top=Math.max(6,top)+"px";
   let done=false;
-  const finish=()=>{ if(done)return; done=true; const dv=box.querySelector("#dtd").value||null; const hh=box.querySelector("#dth").value, mm=box.querySelector("#dtm").value; const tv=(hh&&mm)?`${hh}:${mm}`:null; box.remove(); document.removeEventListener("pointerdown",outside,true); cb(dv,tv); };
+  const finish=()=>{ if(done)return; done=true;
+    const dv=box.querySelector("#dtd").value||null;
+    const sh=box.querySelector("#dtsh").value, sm=box.querySelector("#dtsm").value; const tv=(sh&&sm)?`${sh}:${sm}`:null;
+    const eh=box.querySelector("#dteh").value, em=box.querySelector("#dtem").value; let ev=(eh&&em)?`${eh}:${em}`:null;
+    if(ev && !tv) ev=null;                    // 開始が無いのに終了だけは無効
+    if(ev && tv && ev<=tv) ev=null;           // 終了≦開始は幅なし扱い
+    const av=box.querySelector("#dtatt").value||null;
+    box.remove(); document.removeEventListener("pointerdown",outside,true); cb(dv,tv,ev,av); };
   const cancel=()=>{ if(done)return; done=true; box.remove(); document.removeEventListener("pointerdown",outside,true); };
   const outside=(e)=>{ if(!box.contains(e.target)) finish(); };
   box.querySelector("#dtok").addEventListener("click",finish);
@@ -1058,7 +1179,7 @@ let saving=false, pendingSave=false;
 let dirty=false; // 未保存のローカル変更がある間はtrue（自動取込を止める）
 
 function serializeData(){
-  return JSON.stringify({ v:SCHEMA_VERSION, savedAt:new Date().toISOString(), nextId, vendorMaster, buildingMaster, sites });
+  return JSON.stringify({ v:SCHEMA_VERSION, savedAt:new Date().toISOString(), nextId, vendorMaster, buildingMaster, zeroHolidays:[...zeroHolidays], sites });
 }
 function normalizeSite(raw){
   const s=Object.assign(newSite(raw.id,raw.name,raw.room,raw.category), raw, {open:false});
@@ -1067,10 +1188,13 @@ function normalizeSite(raw){
   s.plan=fix6(s.plan); s.act=fix6(s.act);
   if(!s.works||typeof s.works!=="object") s.works={};
   Object.keys(s.works).forEach(w=>{ const wk=s.works[w]; if(!wk||typeof wk!=="object"){ delete s.works[w]; return; }
-    if(Array.isArray(wk.items)){ wk.items=wk.items.filter(it=>it&&typeof it==="object").map(it=>({name:it.name||"",plan:it.plan||null,act:it.act||null,vendor:it.vendor||null})); }
+    if(Array.isArray(wk.items)){ wk.items=wk.items.filter(it=>it&&typeof it==="object").map(it=>({name:it.name||"",plan:it.plan||null,act:it.act||null,vendor:it.vendor||null,calColor:it.calColor||null})); }
   });
   if(!s.moveinClean||typeof s.moveinClean!=="object") s.moveinClean={order:null,done:null};
   if(!s.keyChange||typeof s.keyChange!=="object") s.keyChange={order:null,done:null};
+  if(s.mtgEndTime===undefined) s.mtgEndTime=null;
+  if(s.attendee===undefined) s.attendee=null;
+  if(s.memo===undefined) s.memo="";
   return s;
 }
 function applyData(obj){
@@ -1078,7 +1202,9 @@ function applyData(obj){
   sites = obj.sites.map(normalizeSite);
   if(Array.isArray(obj.vendorMaster)&&obj.vendorMaster.length) vendorMaster=obj.vendorMaster;
   if(Array.isArray(obj.buildingMaster)) buildingMaster=obj.buildingMaster;
+  zeroHolidays = new Set(Array.isArray(obj.zeroHolidays)?obj.zeroHolidays:[]);
   if(typeof obj.nextId==="number") nextId=obj.nextId;
+  hankakuizeAll();
   syncAllPhase5(); renderStats(); renderBody(); renderCalendar();
 }
 function setSyncStatus(msg,ok){ const el=document.getElementById("syncStatus"); if(!el)return; el.textContent=msg; el.style.color= ok===false?"var(--text-danger)":ok===true?"var(--text-success)":"var(--text-muted)"; }
@@ -1144,7 +1270,7 @@ function isEditing(){
   if(dirty) return true;
   // 日付/時刻の入力ポップアップ、列フィルター、各種モーダルが開いている
   if(document.getElementById("inlinedate")||document.getElementById("inlinedt")||document.getElementById("inlinetime")) return true;
-  if(document.getElementById("colfilterpop")||document.getElementById("settingsmodal")||document.getElementById("newsitemodal")) return true;
+  if(document.getElementById("colfilterpop")||document.getElementById("settingsmodal")||document.getElementById("newsitemodal")||document.getElementById("zeroholmodal")) return true;
   // 自動保存待ち・保存中・ドラッグ中
   if(autoSaveTimer||saving||pendingSave) return true;
   if(typeof DND!=="undefined" && DND) return true;
@@ -1284,7 +1410,7 @@ function pdfListForVendor(vendor,days){
 }
 function buildPdf(){
   const vendor=calVendor;
-  if(vendor==="all"){ alert("PDFを作成するには、上の「全業者」プルダウンから業者を1つ選んでください。選んだ業者の工事だけを出力します。"); return; }
+  if(vendor==="all"||vendor===VENDOR_AZ){ alert("PDFを作成するには、上の業者プルダウンから業者を1つ選んでください。選んだ業者の工事だけを出力します。"); return; }
 
   const days=daysInPeriod();
   const y=calAnchor.getFullYear(), m=calAnchor.getMonth();
@@ -1501,6 +1627,51 @@ function buildPdf(){
 function pdfLabel(e){ const nm=e.name?`·${e.name}`:""; return `[${WORKABBR[e.work]}]${siteLabel(e.site)}${nm}`; }
 function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
+// 要件1①：ZERO休みを登録するミニカレンダー（複数日トグル可）
+function openZeroHolidayModal(){
+  const old=document.getElementById("zeroholmodal"); if(old) old.remove();
+  let viewY=calAnchor.getFullYear(), viewM=calAnchor.getMonth();
+  const ov=document.createElement("div");
+  ov.id="zeroholmodal";
+  ov.style.cssText="position:fixed; inset:0; z-index:11000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
+  ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:18px; width:340px; max-width:94vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
+    <div style="font-size:15px; font-weight:600; margin-bottom:4px;">ZERO休みの登録</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">日付をタップで登録／解除（複数選択可）。グレーの日がZERO休みです。</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <button id="zhPrev" style="font-size:13px; padding:3px 10px;">‹</button>
+      <span id="zhLabel" style="font-size:14px; font-weight:500;"></span>
+      <button id="zhNext" style="font-size:13px; padding:3px 10px;">›</button>
+    </div>
+    <div id="zhGrid"></div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+      <button id="zhClose" style="font-size:13px; padding:6px 16px; background:var(--text-accent); color:#fff; border-color:var(--text-accent);">閉じる</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>{ ov.remove(); refresh(); };
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector("#zhClose").onclick=close;
+  const wd=["日","月","火","水","木","金","土"];
+  const draw=()=>{
+    ov.querySelector("#zhLabel").textContent=`${viewY}年${viewM+1}月`;
+    const first=new Date(viewY,viewM,1), firstDow=first.getDay();
+    const ndays=new Date(viewY,viewM+1,0).getDate();
+    let cells=wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("");
+    for(let i=0;i<firstDow;i++) cells+=`<div></div>`;
+    for(let d=1;d<=ndays;d++){
+      const k=iso(viewY,viewM,d); const on=zeroHolidays.has(k); const hol=holidayName(k);
+      const dow=new Date(viewY,viewM,d).getDay();
+      const col=on?'#374151':(hol||dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-primary)');
+      cells+=`<div data-zk="${k}" style="text-align:center; font-size:13px; padding:7px 0; border-radius:6px; cursor:pointer; background:${on?'#d1d5db':'transparent'}; color:${col}; font-weight:${on?'600':'400'}; border:1px solid ${on?'#9ca3af':'transparent'};">${d}</div>`;
+    }
+    const g=ov.querySelector("#zhGrid");
+    g.innerHTML=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px;">${cells}</div>`;
+    g.querySelectorAll("[data-zk]").forEach(el=>el.addEventListener("click",()=>{ const k=el.dataset.zk; if(zeroHolidays.has(k))zeroHolidays.delete(k); else zeroHolidays.add(k); dirty=true; draw(); }));
+  };
+  ov.querySelector("#zhPrev").onclick=()=>{ viewM--; if(viewM<0){viewM=11;viewY--;} draw(); };
+  ov.querySelector("#zhNext").onclick=()=>{ viewM++; if(viewM>11){viewM=0;viewY++;} draw(); };
+  draw();
+}
+
 document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   const t=b.dataset.tab;
   document.querySelectorAll(".tabbtn").forEach(x=>{x.style.background="var(--surface-2)"; x.style.color="var(--text-secondary)"; x.style.borderColor="var(--border-strong)";});
@@ -1534,6 +1705,7 @@ document.getElementById("btnExport").addEventListener("click",doExport);
 document.getElementById("btnImport").addEventListener("click",()=>document.getElementById("fileImport").click());
 document.getElementById("fileImport").addEventListener("change",(e)=>{ const f=e.target.files&&e.target.files[0]; if(f)doImport(f); e.target.value=""; });
 document.getElementById("pdfbtn").onclick=buildPdf;
+document.getElementById("zeroholbtn").onclick=openZeroHolidayModal;
 document.getElementById("addbtn").onclick=openNewSiteModal;
 function openNewSiteModal(){ openSiteModal(null); }
 function openEditSiteModal(id){ const s=sites.find(x=>x.id===id); if(s) openSiteModal(s); }
@@ -1588,6 +1760,7 @@ function openSiteModal(editSite){
   ov.addEventListener("keydown",e=>{ if(e.key==="Escape")close(); });
 }
 renderHead(); calAnchor=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);
+hankakuizeAll();
 syncAllPhase5(); renderStats(); renderBody(); renderCalendar();
 // 共有接続：保存済みURLがあれば起動時にシートから読み込む
 GAS_URL=loadGasUrl(); GAS_TOKEN=loadGasToken();
