@@ -88,9 +88,11 @@ table{background:var(--surface-2);}
       <button id="viewweek" class="viewbtn" style="border:none; border-radius:0; padding:5px 14px; font-size:13px; color:var(--text-secondary);">週</button>
     </div>
     <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
-      <button id="prevp" aria-label="前へ" style="padding:4px 10px;"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+      <button id="prevp" aria-label="前月へ" title="前の月" style="padding:4px 8px;"><i class="ti ti-chevrons-left" aria-hidden="true"></i></button>
+      <button id="prevw" aria-label="前週へ" title="1週前へ" style="padding:4px 8px; font-size:12px;"><i class="ti ti-chevron-left" aria-hidden="true"></i>週</button>
       <span id="perlabel" style="font-weight:500; min-width:150px; text-align:center;"></span>
-      <button id="nextp" aria-label="次へ" style="padding:4px 10px;"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button id="nextw" aria-label="翌週へ" title="1週後へ" style="padding:4px 8px; font-size:12px;">週<i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button id="nextp" aria-label="翌月へ" title="次の月" style="padding:4px 8px;"><i class="ti ti-chevrons-right" aria-hidden="true"></i></button>
     </div>
     <button id="zeroholbtn" style="display:none; font-size:13px;"><i class="ti ti-calendar-off" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> ZERO休み登録</button>
     <button id="pdfbtn" style="font-size:13px;"><i class="ti ti-file-type-pdf" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 業者向けPDF</button>
@@ -623,9 +625,12 @@ function daysInPeriod(){
     else { const d=new Date(calAnchor); const dow=d.getDay(); start=new Date(d); start.setDate(d.getDate()-dow); }
     return Array.from({length:7},(_,i)=>{const x=new Date(start); x.setDate(start.getDate()+i); return x;});
   }
-  const y=calAnchor.getFullYear(), m=calAnchor.getMonth(); const days=new Date(y,m+1,0).getDate();
-  return Array.from({length:days},(_,i)=>new Date(y,m,i+1));
+  // 月表示：常時6週（42日）。グリッド先頭はcalAnchorを含む週の日曜。
+  const gs=monthGridStart();
+  return Array.from({length:42},(_,i)=>{const x=new Date(gs); x.setDate(gs.getDate()+i); return x;});
 }
+// 月表示グリッドの先頭日（calAnchorを含む週の日曜）
+function monthGridStart(){ const d=new Date(calAnchor); const dow=d.getDay(); const s=new Date(d); s.setDate(d.getDate()-dow); s.setHours(0,0,0,0); return s; }
 function sitematch(s){ return calSite==="all"||s.id===Number(calSite); }
 // カレンダーの業者フィルタ判定（all / アルファ&ZERO複合 / 単一業者）
 function vendorMatch(v){ if(calVendor==="all") return true; if(calVendor===VENDOR_AZ) return AZ_VENDORS.includes(v); return v===calVendor; }
@@ -837,9 +842,13 @@ function renderCalendar(){
     : "帯・チップはドラッグで移動、クリックで編集。下の未手配をカレンダーへドラッグで割当。");
 
   const days=daysInPeriod();
-  const y=calAnchor.getFullYear(), m=calAnchor.getMonth();
   if(calView==="week"){ const a=days[0],b=days[6]; document.getElementById("perlabel").textContent=`${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
-  else document.getElementById("perlabel").textContent=`${y}年${m+1}月`;
+  else {
+    const a=days[0], b=days[days.length-1];
+    // 月頭起点の標準6週グリッド（calAnchorが1日）は年月表示、週送り後は範囲表示
+    if(calAnchor.getDate()===1) document.getElementById("perlabel").textContent=`${calAnchor.getFullYear()}年${calAnchor.getMonth()+1}月`;
+    else document.getElementById("perlabel").textContent=`${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`;
+  }
 
   let spans=collectSpans();
   spans.sort((a,b)=>a.start.localeCompare(b.start));
@@ -854,7 +863,7 @@ function renderCalendar(){
   const tKey=todayKey();
   let weeks=[];
   if(calView==="week") weeks=[days];
-  else { const firstDow=days[0].getDay(); let row=new Array(firstDow).fill(null); days.forEach(dt=>{row.push(dt); if(row.length===7){weeks.push(row); row=[];}}); if(row.length){while(row.length<7)row.push(null); weeks.push(row);} }
+  else { for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7)); }
 
   const wd=["日","月","火","水","木","金","土"];
   let headRow;
@@ -920,7 +929,7 @@ function renderCalendarLanes(spans, days, groupBySite){
   const tKey=todayKey();
   let weeks=[];
   if(calView==="week") weeks=[days];
-  else { const firstDow=days[0].getDay(); let row=new Array(firstDow).fill(null); days.forEach(dt=>{row.push(dt); if(row.length===7){weeks.push(row); row=[];}}); if(row.length){while(row.length<7)row.push(null); weeks.push(row);} }
+  else { for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7)); }
 
   const wd=["日","月","火","水","木","金","土"];
   let headRow;
@@ -931,6 +940,7 @@ function renderCalendarLanes(spans, days, groupBySite){
   }
 
   const colW=100/7, topPad=26;
+  const baseMonth = (calAnchor.getDate()===1) ? calAnchor.getMonth() : -1;  // 月頭グリッド時のみ他月を淡色化
   let weeksHtml="";
   weeks.forEach(week=>{
     const weekKeys=week.map(dt=>dt?keyOf(dt):null);
@@ -972,8 +982,12 @@ function renderCalendarLanes(spans, days, groupBySite){
       const cellBg = isToday?'var(--bg-accent-muted)':(hol?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
       const holLabel = (hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'')
         +(isZeroHol?`<div title="ZERO休み" style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.1; margin-top:1px;">ZERO休み</div>`:'');
-      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
-        <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getDate()}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
+      const otherMonth = (calView==="month" && baseMonth>=0 && dt.getMonth()!==baseMonth);
+      const showMD = (calView==="month" && (baseMonth<0 || otherMonth)); // 週送り時は全日M/D、月頭時は他月のみM/D
+      const dnumTxt = showMD ? `${dt.getMonth()+1}/${dt.getDate()}` : `${dt.getDate()}`;
+      const cellOpacity = otherMonth ? 'opacity:.62;' : '';
+      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg}; ${cellOpacity}">
+        <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dnumTxt}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
         <div style="height:${areaH}px;"></div></div>`;
     });
     cellsHtml+=`</div>`;
@@ -1397,7 +1411,7 @@ function isEditing(){
   if(dirty) return true;
   // 日付/時刻の入力ポップアップ、列フィルター、各種モーダルが開いている
   if(document.getElementById("inlinedate")||document.getElementById("inlinedt")||document.getElementById("inlinetime")) return true;
-  if(document.getElementById("colfilterpop")||document.getElementById("settingsmodal")||document.getElementById("newsitemodal")||document.getElementById("zeroholmodal")) return true;
+  if(document.getElementById("colfilterpop")||document.getElementById("settingsmodal")||document.getElementById("newsitemodal")||document.getElementById("zeroholmodal")||document.getElementById("pdfmonthmodal")) return true;
   // 自動保存待ち・保存中・ドラッグ中
   if(autoSaveTimer||saving||pendingSave) return true;
   if(typeof DND!=="undefined" && DND) return true;
@@ -1541,26 +1555,69 @@ function pdfListForVendor(vendor,days){
   rows.sort((a,b)=>(a.start||"").localeCompare(b.start||"")||siteLabel(a.site).localeCompare(siteLabel(b.site)));
   return rows;
 }
+// PDFの主月を推定（月頭グリッドはその月、週送り時は42日中の最多月）
+function pdfGuessMonth(){
+  if(calView==="month" && calAnchor.getDate()===1) return {y:calAnchor.getFullYear(),m:calAnchor.getMonth()};
+  const days=daysInPeriod(); const cnt={};
+  days.forEach(dt=>{ const k=dt.getFullYear()+"-"+dt.getMonth(); cnt[k]=(cnt[k]||0)+1; });
+  let best=null,bn=-1; Object.keys(cnt).forEach(k=>{ if(cnt[k]>bn){bn=cnt[k];best=k;} });
+  const [y,m]=best.split("-").map(Number); return {y,m};
+}
+// PDFボタン：月を選ばせてから出力（請求用に「その月分」だけを出す）
 function buildPdf(){
   const vendor=calVendor;
   if(vendor==="all"||vendor===VENDOR_AZ){ alert("PDFを作成するには、上の業者プルダウンから業者を1つ選んでください。選んだ業者の工事だけを出力します。"); return; }
-
-  const days=daysInPeriod();
-  const y=calAnchor.getFullYear(), m=calAnchor.getMonth();
-  let perLabel;
-  if(calView==="week"){ const a=days[0],b=days[6]; perLabel=`${a.getFullYear()}年 ${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
-  else perLabel=`${y}年${m+1}月`;
-
+  const g=pdfGuessMonth();
+  openPdfMonthModal(g.y,g.m,vendor);
+}
+// 出力対象月を選ぶ小モーダル（デフォルトは現在の主月）
+function openPdfMonthModal(defY,defM,vendor){
+  const old=document.getElementById("pdfmonthmodal"); if(old) old.remove();
+  const ov=document.createElement("div");
+  ov.id="pdfmonthmodal";
+  ov.style.cssText="position:fixed; inset:0; z-index:11000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
+  // 前後6ヶ月ぶんの候補
+  const base=new Date(defY,defM,1); const opts=[];
+  for(let d=-6; d<=6; d++){ const dt=new Date(base.getFullYear(),base.getMonth()+d,1); opts.push({y:dt.getFullYear(),m:dt.getMonth()}); }
+  const optHtml=opts.map(o=>`<option value="${o.y}-${o.m}"${(o.y===defY&&o.m===defM)?' selected':''}>${o.y}年${o.m+1}月</option>`).join("");
+  ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:20px; width:300px; max-width:92vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
+    <div style="font-size:15px; font-weight:600; margin-bottom:6px;">業者向けPDF：対象月</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">選んだ月の工事分のみを出力します（請求用）。業者：<b>${escapeHtml(vendor)}</b></div>
+    <select id="pdfMonthSel" style="width:100%; box-sizing:border-box; font-size:14px; padding:7px 9px; margin-bottom:16px;">${optHtml}</select>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button id="pdfmCancel" style="font-size:13px; padding:6px 14px;">キャンセル</button>
+      <button id="pdfmOk" style="font-size:13px; padding:6px 16px; background:var(--text-accent); color:#fff; border-color:var(--text-accent);">PDF作成</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector("#pdfmCancel").onclick=close;
+  ov.querySelector("#pdfmOk").onclick=()=>{ const [y,m]=ov.querySelector("#pdfMonthSel").value.split("-").map(Number); close(); buildPdfForMonth(y,m,vendor); };
+  ov.querySelector("#pdfMonthSel").focus();
+}
+function buildPdfForMonth(pdfY,pdfM,vendor){
+  // 対象月の1日を含む週から6週グリッド（当月分だけ工事を描く）
+  const gs=(()=>{ const d=new Date(pdfY,pdfM,1); const dow=d.getDay(); const s=new Date(d); s.setDate(d.getDate()-dow); s.setHours(0,0,0,0); return s; })();
+  const days=Array.from({length:42},(_,i)=>{ const x=new Date(gs); x.setDate(gs.getDate()+i); return x; });
+  const perLabel=`${pdfY}年${pdfM+1}月分`;
+  const inMonth=(dt)=> dt.getFullYear()===pdfY && dt.getMonth()===pdfM;
+  buildPdfCore(vendor, days, perLabel, inMonth);
+}
+function buildPdfCore(vendor, days, perLabel, inMonth){
   const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
   const tKey=todayKey();
 
-  // 週組み（renderCalendarと同じ規則）
+  // 週組み
   let weeks=[];
-  if(calView==="week") weeks=[days];
-  else { const firstDow=days[0].getDay(); let row=new Array(firstDow).fill(null); days.forEach(dt=>{row.push(dt); if(row.length===7){weeks.push(row); row=[];}}); if(row.length){while(row.length<7)row.push(null); weeks.push(row);} }
+  for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
 
   // スロット割当（帯の重なり回避、renderCalendarと同じ）
-  let spans=pdfSpansForVendor(vendor);
+  let spans=pdfSpansForVendor(vendor).filter(e=>{ // 対象月に1日でも掛かる帯のみ
+    if(!inMonth) return true;
+    let d=parseISO(e.start), end=parseISO(e.end);
+    for(let x=new Date(d); x<=end; x.setDate(x.getDate()+1)){ if(inMonth(x)) return true; }
+    return false;
+  });
   spans.sort((a,b)=>a.start.localeCompare(b.start));
   const slotEnds=[]; spans.forEach(e=>{let sl=0; while(sl<slotEnds.length&&slotEnds[sl]>=e.start)sl++; e.slot=sl; slotEnds[sl]=e.end;});
 
@@ -1577,7 +1634,7 @@ function buildPdf(){
     </div>`;
 
   // 凡例
-  const usedWorks=[...new Set([...spans.map(e=>e.work), ...weeks.flat().filter(Boolean).flatMap(dt=>pdfSinglesOnDay(keyOf(dt),vendor).map(e=>e.work))])];
+  const usedWorks=[...new Set([...spans.map(e=>e.work), ...weeks.flat().filter(Boolean).filter(dt=>!inMonth||inMonth(dt)).flatMap(dt=>pdfSinglesOnDay(keyOf(dt),vendor).map(e=>e.work))])];
   if(usedWorks.length){
     html+=`<div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px; font-size:11px;">`+
       usedWorks.map(w=>{const c=WORKCOLOR[w]; return `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:11px; height:11px; border-radius:2px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("")+
@@ -1594,28 +1651,31 @@ function buildPdf(){
     let usedSpanSlots=0;
     week.forEach(dt=>{ if(!dt)return; const k=keyOf(dt); spans.forEach(e=>{ if(k>=e.start&&k<=e.end) usedSpanSlots=Math.max(usedSpanSlots,e.slot+1); }); });
     const spanAreaH=usedSpanSlots*(ROW2+GAP2);
-    const topPad=22, cellMinH=(calView==="week"?96:64);
+    const topPad=22, cellMinH=64;
 
     let cellsHtml=`<div class="pdf-daygrid" style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; position:relative;">`;
     week.forEach(dt=>{
       if(!dt){ cellsHtml+=`<div></div>`; return; }
       const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey);
+      const other = inMonth ? !inMonth(dt) : false;
       const hol=holidayName(k);
-      const singles=pdfSinglesOnDay(k,vendor);
+      const singles = other ? [] : pdfSinglesOnDay(k,vendor);
       const chips=singles.map(e=>{const c=pdfColor(vendor,e.work,e.site,e.color); return `<div style="background:${e.done?c.done:c.bg}; border:1px solid ${c.fg}; color:${c.fg}; font-size:9px; line-height:1.25; padding:1px 4px; margin-top:2px; border-radius:4px; word-break:break-word;">${escapeHtml(pdfLabel(e))}</div>`;}).join("");
-      const dnumColor = dow===0?'#c0392b':(hol?'#c0392b':dow===6?'#2563eb':'#555');
-      const cellBg = isToday?'#eef3fd':(hol?'#f8d7d7':'#fff');
-      const holLabel = hol?`<div style="font-size:8px; color:#c0392b; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
+      const dnumColor = other?'#bbb':(dow===0?'#c0392b':(hol?'#c0392b':dow===6?'#2563eb':'#555'));
+      const cellBg = other?'#f4f4f4':(isToday?'#eef3fd':(hol?'#f8d7d7':'#fff'));
+      const dnumTxt = other ? `${dt.getMonth()+1}/${dt.getDate()}` : `${dt.getDate()}`;
+      const holLabel = (!other&&hol)?`<div style="font-size:8px; color:#c0392b; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
       cellsHtml+=`<div class="pdf-daycell" style="min-height:${cellMinH}px; border:${isToday?'1.2px solid #2563eb':'0.5px solid #ccc'}; border-radius:6px; padding:3px; background:${cellBg};">
-        <div style="font-size:11px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getDate()}${isToday?' <span style="font-size:8px; padding:0 3px; border-radius:3px; background:#dbeafe; color:#2563eb;">今日</span>':''}</div>${holLabel}
+        <div style="font-size:11px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dnumTxt}${(!other&&isToday)?' <span style="font-size:8px; padding:0 3px; border-radius:3px; background:#dbeafe; color:#2563eb;">今日</span>':''}</div>${holLabel}
         <div style="height:${spanAreaH}px;"></div>${chips}</div>`;
     });
     cellsHtml+=`</div>`;
 
     let overlay=`<div style="position:absolute; inset:0; pointer-events:none;">`;
     const weekKeys=week.map(dt=>dt?keyOf(dt):null);
+    const inMon=week.map(dt=>dt?(inMonth?inMonth(dt):true):false);
     spans.forEach(e=>{
-      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}}
+      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&inMon[c]&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}}
       if(fc<0) return;
       const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+e.slot*(ROW2+GAP2);
       const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
@@ -1628,7 +1688,11 @@ function buildPdf(){
   });
 
   // 現場名一覧（この業者の工事が期間内にある現場を1行ずつ。新項目＋金額合計）
-  const list=pdfListForVendor(vendor,days);
+  let list=pdfListForVendor(vendor,days);
+  if(inMonth){ list=list.filter(r=>{ // 対象月に掛かる工事のみ（帯は期間内に1日でも当月なら対象）
+    if(r.kind==="span" && r.start && r.end){ let d=parseISO(r.start), end=parseISO(r.end); for(let x=new Date(d); x<=end; x.setDate(x.getDate()+1)){ if(inMonth(x)) return true; } return false; }
+    return r.start ? inMonth(parseISO(r.start)) : false;
+  }); }
   // 現場ごとに集約（重複排除、順序は最初の予定日順）
   const siteOrder=[]; const seen=new Set();
   list.forEach(r=>{ if(!seen.has(r.site.id)){ seen.add(r.site.id); siteOrder.push(r.site); } });
@@ -1827,8 +1891,24 @@ document.getElementById("viewweek").onclick=()=>setView("week");
 document.getElementById("sitesel").addEventListener("change",e=>{calSite=e.target.value; renderCalendar();});
 document.getElementById("worksel").addEventListener("change",e=>{calWork=e.target.value; renderCalendar();});
 document.getElementById("vendorsel").addEventListener("change",e=>{calVendor=e.target.value; renderCalendar();});
-document.getElementById("prevp").onclick=()=>{ if(calView==="week"){ if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); } calAnchor.setDate(calAnchor.getDate()-7); } else {calAnchor=new Date(calAnchor.getFullYear(),calAnchor.getMonth()-1,1);} renderCalendar();};
-document.getElementById("nextp").onclick=()=>{ if(calView==="week"){ if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); } calAnchor.setDate(calAnchor.getDate()+7); } else {calAnchor=new Date(calAnchor.getFullYear(),calAnchor.getMonth()+1,1);} renderCalendar();};
+// 週送り（両ビュー共通、±7日スライド）
+function shiftWeek(delta){
+  if(calView==="week"){
+    if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); }
+    calAnchor.setDate(calAnchor.getDate()+7*delta);
+  } else { calAnchor=new Date(calAnchor); calAnchor.setDate(calAnchor.getDate()+7*delta); }
+  renderCalendar();
+}
+// 月移動（月ビュー：当該月頭へ）
+function shiftMonth(delta){
+  if(calView==="week"){ if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); } calAnchor.setDate(calAnchor.getDate()+28*delta); }
+  else { calAnchor=new Date(calAnchor.getFullYear(),calAnchor.getMonth()+delta,1); }
+  renderCalendar();
+}
+document.getElementById("prevp").onclick=()=>shiftMonth(-1);
+document.getElementById("nextp").onclick=()=>shiftMonth(1);
+document.getElementById("prevw").onclick=()=>shiftWeek(-1);
+document.getElementById("nextw").onclick=()=>shiftWeek(1);
 document.getElementById("filter").onchange=renderBody;
 document.getElementById("search").addEventListener("input",renderBody);
 document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{ sortKey=b.dataset.sort; renderBody(); }));
