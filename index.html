@@ -65,6 +65,7 @@ table{background:var(--surface-2);}
     <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px;">
     <select id="filter" style="width:auto; min-width:130px;"><option value="incomplete">未完了のみ</option><option value="all">すべて表示</option></select>
     <span style="font-size:12px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;">並べ替え：
+      <button class="sortbtn" data-sort="created" style="font-size:12px; padding:3px 10px;">登録順</button>
       <button class="sortbtn" data-sort="phase" style="font-size:12px; padding:3px 10px;">現在地</button>
       <button class="sortbtn" data-sort="name" style="font-size:12px; padding:3px 10px;">現場名</button>
       <button class="sortbtn" data-sort="date1" style="font-size:12px; padding:3px 10px;">①立会日</button>
@@ -199,7 +200,7 @@ let sites=[
 let nextId=5;
 let calAnchor=new Date(TODAY);
 let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
-let sortKey="phase"; // phase | name | date1
+let sortKey="created"; // created(登録順) | phase | name | date1
 // 列フィルター状態。null＝無効。
 // name/status/vendorはSet、phaseRange[i]は各工程i(0-5)の日付範囲{from,to}、moveinRange/keyRangeは入居前清掃/鍵交換の実施日範囲
 let colFilters={ name:null, status:null, vendor:null, category:null,
@@ -432,7 +433,8 @@ function renderBody(){
   // 並べ替え（切替式）
   if(sortKey==="name") rows.sort((a,b)=>(a.name+a.room).localeCompare(b.name+b.room,"ja"));
   else if(sortKey==="date1") rows.sort((a,b)=>(a.act[0]||a.plan[0]||"9999").localeCompare(b.act[0]||b.plan[0]||"9999"));
-  else rows.sort((a,b)=>currentPhase(a)-currentPhase(b)); // phase（既定）
+  else if(sortKey==="phase") rows.sort((a,b)=>currentPhase(a)-currentPhase(b));
+  else rows.sort((a,b)=>a.id-b.id); // created（既定＝登録順）
   // ソートボタンのアクティブ表示
   document.querySelectorAll(".sortbtn").forEach(b=>{ const on=b.dataset.sort===sortKey;
     b.style.background=on?"var(--text-accent)":"var(--surface-2)"; b.style.color=on?"#fff":"var(--text-primary)"; b.style.fontWeight=on?"600":"400"; });
@@ -453,7 +455,7 @@ function renderBody(){
         <div style="display:flex; align-items:flex-start; gap:6px;">
           <div data-toggle="${s.id}" style="cursor:pointer; flex:1;">
             <div style="font-weight:500;"><i class="ti ti-chevron-${s.open?'down':'right'}" aria-hidden="true" style="font-size:13px; vertical-align:-1px;"></i> ${s.name}</div>
-            <div style="font-size:11px; color:var(--text-secondary); padding-left:16px;">${s.room}号室${wn?` · ④内訳${wn}件`:""}${missBadge}</div>
+            <div style="font-size:11px; color:var(--text-secondary); padding-left:16px;"><span style="font-weight:700; color:var(--text-primary);">${s.room}号室</span>${wn?` · ④内訳${wn}件`:""}${missBadge}</div>
           </div>
           <div style="display:flex; flex-direction:column; gap:3px; flex:none;">
           <button data-siteedit="${s.id}" title="現場名・区分を編集" style="font-size:11px; padding:2px 7px; color:var(--text-secondary); border-color:var(--border);"><i class="ti ti-pencil" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
@@ -463,7 +465,8 @@ function renderBody(){
       <td style="padding:8px 6px; text-align:center; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
         <span style="display:inline-block; font-size:11px; font-weight:600; padding:2px 7px; border-radius:var(--radius); background:${catColor.bg}; color:${catColor.fg};">${s.category}</span></td>
       <td style="padding:8px 8px; border-right:0.5px solid var(--border);">${status}</td>
-      ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}<td style="padding:5px 6px; border-left:0.5px solid var(--border); vertical-align:top;"><textarea data-memo="${s.id}" rows="2" placeholder="メモ" style="width:130px; box-sizing:border-box; font-size:12px; padding:3px 5px; resize:vertical; min-height:32px;">${(s.memo||"").replace(/</g,"&lt;")}</textarea></td></tr>`;
+      ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}<td style="padding:5px 6px; border-left:0.5px solid var(--border); vertical-align:top;"><textarea data-memo="${s.id}" rows="2" placeholder="メモ" style="width:130px; box-sizing:border-box; font-size:12px; padding:3px 5px; resize:vertical; min-height:32px;">${(s.memo||"").replace(/</g,"&lt;")}</textarea></td></tr>`
+    + (s.open ? `<tr class="detailrow"><td colspan="14" style="padding:0 10px 12px; background:var(--bg-accent-muted); position:sticky; left:0;"><div id="detailinline_${s.id}"></div></td></tr>` : "");
   }).join("");
   tb.querySelectorAll("[data-toggle]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.toggle)); if(s){const was=s.open; sites.forEach(x=>x.open=false); s.open=!was; refresh();}}));
   tb.querySelectorAll("[data-siteedit]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); openEditSiteModal(Number(el.dataset.siteedit));}));
@@ -486,7 +489,9 @@ function renderBody(){
       s[field][k]=v; refresh();
     }, opts);
   }));
-  renderDetail(sites.find(s=>s.open)||null);
+  const openS=sites.find(s=>s.open)||null;
+  document.getElementById("detail").innerHTML="";
+  if(openS) renderDetailInto(openS, document.getElementById("detailinline_"+openS.id));
   updateFilterClearBtn();
 }
 // フィルターが有効なとき「フィルター解除」ボタンを表示
@@ -524,8 +529,9 @@ function presetOrFreeHtml(kind,cur,presets){
   return `<span style="display:inline-flex; gap:4px; align-items:center;">${sel}${free}</span>`;
 }
 
-function renderDetail(s){
-  const d=document.getElementById("detail");
+function renderDetail(s){ renderDetailInto(s, document.getElementById("detail")); }
+function renderDetailInto(s, d){
+  if(!d) return;
   if(!s){d.innerHTML=""; return;}
   let rows="";
   const dot=(w)=>{const col=WORKCOLOR[w]; return `<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${col.bg}; border:1px solid ${col.fg}; margin-right:5px; vertical-align:0;"></span>`;};
@@ -631,6 +637,8 @@ function daysInPeriod(){
 }
 // 月表示グリッドの先頭日（calAnchorを含む週の日曜）
 function monthGridStart(){ const d=new Date(calAnchor); const dow=d.getDay(); const s=new Date(d); s.setDate(d.getDate()-dow); s.setHours(0,0,0,0); return s; }
+// 既定アンカー：今日の2週間前（→今日を含む週が6週グリッドの3段目になる）
+function calDefaultAnchor(){ const d=new Date(TODAY); d.setDate(d.getDate()-14); return d; }
 function sitematch(s){ return calSite==="all"||s.id===Number(calSite); }
 // カレンダーの業者フィルタ判定（all / アルファ&ZERO複合 / 単一業者）
 function vendorMatch(v){ if(calVendor==="all") return true; if(calVendor===VENDOR_AZ) return AZ_VENDORS.includes(v); return v===calVendor; }
@@ -843,12 +851,7 @@ function renderCalendar(){
 
   const days=daysInPeriod();
   if(calView==="week"){ const a=days[0],b=days[6]; document.getElementById("perlabel").textContent=`${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
-  else {
-    const a=days[0], b=days[days.length-1];
-    // 月頭起点の標準6週グリッド（calAnchorが1日）は年月表示、週送り後は範囲表示
-    if(calAnchor.getDate()===1) document.getElementById("perlabel").textContent=`${calAnchor.getFullYear()}年${calAnchor.getMonth()+1}月`;
-    else document.getElementById("perlabel").textContent=`${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`;
-  }
+  else { const a=days[0], b=days[days.length-1]; document.getElementById("perlabel").textContent=`${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
 
   let spans=collectSpans();
   spans.sort((a,b)=>a.start.localeCompare(b.start));
@@ -940,7 +943,6 @@ function renderCalendarLanes(spans, days, groupBySite){
   }
 
   const colW=100/7, topPad=26;
-  const baseMonth = (calAnchor.getDate()===1) ? calAnchor.getMonth() : -1;  // 月頭グリッド時のみ他月を淡色化
   let weeksHtml="";
   weeks.forEach(week=>{
     const weekKeys=week.map(dt=>dt?keyOf(dt):null);
@@ -979,14 +981,11 @@ function renderCalendarLanes(spans, days, groupBySite){
       const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey), hol=holidayName(k);
       const isZeroHol = showZeroHolidays() && zeroHolidays.has(k);
       const dnumColor = isToday?'var(--text-accent)':(hol?'var(--text-danger)':(dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-secondary)'));
-      const cellBg = isToday?'var(--bg-accent-muted)':(hol?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
+      const cellBg = isToday?'var(--bg-accent-muted)':((hol||dow===0)?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
       const holLabel = (hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'')
         +(isZeroHol?`<div title="ZERO休み" style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.1; margin-top:1px;">ZERO休み</div>`:'');
-      const otherMonth = (calView==="month" && baseMonth>=0 && dt.getMonth()!==baseMonth);
-      const showMD = (calView==="month" && (baseMonth<0 || otherMonth)); // 週送り時は全日M/D、月頭時は他月のみM/D
-      const dnumTxt = showMD ? `${dt.getMonth()+1}/${dt.getDate()}` : `${dt.getDate()}`;
-      const cellOpacity = otherMonth ? 'opacity:.62;' : '';
-      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg}; ${cellOpacity}">
+      const dnumTxt = `${dt.getMonth()+1}/${dt.getDate()}`;
+      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
         <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dnumTxt}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
         <div style="height:${areaH}px;"></div></div>`;
     });
@@ -1879,7 +1878,7 @@ document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
 }));
 function setView(v){ calView=v;
   if(v==="week"){ weekFromToday=true; calAnchor=new Date(TODAY); }
-  else { calAnchor=new Date(TODAY.getFullYear(),TODAY.getMonth(),1); }
+  else { calAnchor=calDefaultAnchor(); }
   document.getElementById("viewmonth").style.color=v==="month"?"var(--text-primary)":"var(--text-secondary)";
   document.getElementById("viewmonth").style.background=v==="month"?"var(--surface-3)":"transparent";
   document.getElementById("viewweek").style.color=v==="week"?"var(--text-primary)":"var(--text-secondary)";
@@ -1973,7 +1972,7 @@ function openSiteModal(editSite){
   };
   ov.addEventListener("keydown",e=>{ if(e.key==="Escape")close(); });
 }
-renderHead(); calAnchor=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);
+renderHead(); calAnchor=calDefaultAnchor();
 hankakuizeAll();
 syncAllPhase5(); renderStats(); renderBody(); renderCalendar();
 // 共有接続：保存済みURLがあれば起動時にシートから読み込む
