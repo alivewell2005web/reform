@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v63</title>
+<title>リフォーム進捗管理アプリ v64</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -957,7 +957,7 @@ function renderCalendarFlow(spans, days){
       singlesOnDay(k).forEach((e,i)=>{ const c=effColor(e.work,e.site,e.color);
         chips+=`<div class="chip" data-chipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-y; background:${e.done?c.done:c.bg}; color:${c.fg}; font-size:10px; line-height:1.25; padding:2px 4px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`; });
       extraChipsOnDay(k).forEach((e,i)=>{
-        chips+=`<div class="xchip" data-xchipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-y; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; font-size:10px; line-height:1.25; padding:2px 4px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${extraChipLabel(e)}${e.time?` ${e.time}`:""}</div>`; });
+        chips+=`<div class="xchip" data-xchipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-y; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; font-size:10px; line-height:1.25; padding:2px 4px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${extraChipLabel(e)}</div>`; });
       const holLabel = (hol?`<div style="font-size:9px; color:var(--text-danger); line-height:1.15;">${hol}</div>`:'')
         +(isZeroHol?`<div style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.15;">ZERO休み</div>`:'');
       html+=`<div class="daycell" data-day="${k}" style="min-height:52px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
@@ -987,6 +987,13 @@ function renderCalendarLanes(spans, days, groupBySite){
   }
 
   const colW=100/7, topPad=26;
+  // 列の実ピクセル幅からチップ内の折返し行数を推定し、可変高で積む（PC/横画面の改行対応）
+  const gridW=(document.getElementById("calgrid")||{}).clientWidth||840;
+  const colPx=gridW/7;
+  const chipInnerPx=Math.max(28, colPx-8-10);     // セル内チップの実効テキスト幅（左右padding込み）
+  const CHAR_PX=6.4, LH=14, VPAD=6;                // 10px日本語≒6.4px幅、行高14px、上下padding
+  const estLines=(txt)=>{ const s=String(txt||""); const perLine=Math.max(3, Math.floor(chipInnerPx/CHAR_PX)); return Math.max(1, Math.ceil([...s].length/perLine)); };
+  const itemH=(txt)=> estLines(txt)*LH+VPAD;       // チップ高さ(px)
   let weeksHtml="";
   weeks.forEach(week=>{
     const weekKeys=week.map(dt=>dt?keyOf(dt):null);
@@ -1003,19 +1010,19 @@ function renderCalendarLanes(spans, days, groupBySite){
       extraChipsOnDay(k).forEach((e,i)=>{ const g=gid(e.site.id); noteFirst(g); const kk=g+"__"+c; (singleByCell[kk]=singleByCell[kk]||[]).push({kind:"xchip",e,i,k}); });
     }
 
-    // レーン高さ＝その週で「同一グループ・同一日」に載る最大アイテム数（帯も1件として数える）
-    const laneRows={}, laneBase={}; let cursor=0;
+    // レーン高さ(px)＝その週で「同一グループ・同一日」に積まれるチップ高さ合計の最大
+    const laneH={}, laneBasePx={}; let cursorPx=0;
     siteOrder.forEach(g=>{
-      let maxDay=1;
+      let maxDay=LH+VPAD; // 最低1行
       for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
-        let n=0;
-        (spanBySite[g]||[]).forEach(e=>{ if(k>=e.start&&k<=e.end) n++; });
-        const arr=singleByCell[g+"__"+c]; if(arr) n+=arr.length;
-        if(n>maxDay) maxDay=n;
+        let hsum=0, cnt=0;
+        (spanBySite[g]||[]).forEach(e=>{ if(k>=e.start&&k<=e.end){ hsum+=itemH(labelText(e)); cnt++; } });
+        const arr=singleByCell[g+"__"+c]; if(arr) arr.forEach(it=>{ hsum+=itemH(it.kind==="chip"?labelText(it.e):extraChipLabel(it.e)); cnt++; });
+        if(cnt>0){ hsum+=(cnt-1)*GAP; if(hsum>maxDay) maxDay=hsum; }
       }
-      laneRows[g]=maxDay; laneBase[g]=cursor; cursor+=maxDay;
+      laneH[g]=maxDay; laneBasePx[g]=cursorPx; cursorPx+=maxDay+GAP;
     });
-    const areaH=cursor*(ROW+GAP);
+    const areaH=cursorPx;
     const cellMinH=(calView==="week"?120:74);
 
     // セル本体
@@ -1035,32 +1042,34 @@ function renderCalendarLanes(spans, days, groupBySite){
     });
     cellsHtml+=`</div>`;
 
-    // オーバーレイ：現場レーンの先頭行(サブ0)から、その日のアイテムを順に積む
+    // オーバーレイ：現場レーンの上端から、その日のアイテムを高さぶん積む（可変高）
     let overlay=`<div style="position:absolute; inset:0; pointer-events:none;">`;
-    // 各日・各現場のサブ行カウンタ
-    const subUsed={}; // "id__c" -> 次に使うサブ行番号
-    const nextSub=(id,c)=>{ const kk=id+"__"+c; const v=subUsed[kk]||0; subUsed[kk]=v+1; return v; };
-    // 帯（開始日のサブ行を確保し、その行で全期間を描く）
+    const offPx={}; // "gid__c" -> その日の現在の縦オフセット(px)
+    const takeOff=(id,c,h)=>{ const kk=id+"__"+c; const v=offPx[kk]||0; offPx[kk]=v+h+GAP; return v; };
+    // 帯（開始日で高さを確保し、掛かる各日を同じtopに置き、各日のオフセットを進める）
     siteOrder.forEach(id=>{ (spanBySite[id]||[]).forEach(e=>{
       let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}} if(fc<0)return;
-      const sub=nextSub(id,fc); // 開始日でサブ行を確保。他日も同じ行に描く（掛かる各日でその行を消費）
-      for(let c=fc+1;c<=lc;c++){ if((subUsed[id+"__"+c]||0)<=sub) subUsed[id+"__"+c]=sub+1; }
-      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+(laneBase[id]+sub)*(ROW+GAP);
+      const h=itemH(labelText(e));
+      const sub=takeOff(id,fc,h);
+      for(let c=fc+1;c<=lc;c++){ const kk=id+"__"+c; if((offPx[kk]||0)<=sub) offPx[kk]=sub+h+GAP; }
+      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+laneBasePx[id]+sub;
       const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
       const c=effColor(e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
       const radius=`${startsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${startsHere?'6px':'2px'}`;
-      overlay+=`<div class="span" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500;">${labelText(e)}</div>`;
+      overlay+=`<div class="span" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:normal; word-break:break-word; overflow:hidden; font-weight:500;">${labelText(e)}</div>`;
     }); });
-    // 単日・追加（帯の下の空きサブ行から順に）
+    // 単日・追加（帯の下から順に）
     for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
       siteOrder.forEach(id=>{ const arr=singleByCell[id+"__"+c]; if(!arr)return;
         arr.forEach(item=>{
-          const sub=nextSub(id,c);
-          const top=topPad+(laneBase[id]+sub)*(ROW+GAP), left=c*colW;
+          const label = item.kind==="chip"?labelText(item.e):extraChipLabel(item.e);
+          const h=itemH(label);
+          const sub=takeOff(id,c,h);
+          const top=topPad+laneBasePx[id]+sub, left=c*colW;
           if(item.kind==="chip"){ const e=item.e; const c2=effColor(e.work,e.site,e.color);
-            overlay+=`<div class="chip" data-chipkey="${k}__${item.i}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:5px; background:${e.done?c2.done:c2.bg}; color:${c2.fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${labelText(e)}</div>`;
+            overlay+=`<div class="chip" data-chipkey="${k}__${item.i}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:5px; background:${e.done?c2.done:c2.bg}; color:${c2.fg}; white-space:normal; word-break:break-word; overflow:hidden;">${labelText(e)}</div>`;
           } else { const e=item.e;
-            overlay+=`<div class="xchip" data-xchipkey="${k}__${item.i}" title="${extraChipLabel(e)}（実施）" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:5px; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${extraChipLabel(e)}</div>`;
+            overlay+=`<div class="xchip" data-xchipkey="${k}__${item.i}" title="${extraChipLabel(e)}（実施）" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:5px; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; white-space:normal; word-break:break-word; overflow:hidden;">${extraChipLabel(e)}</div>`;
           }
         });
       });
@@ -1954,6 +1963,9 @@ document.getElementById("prevp").onclick=()=>shiftMonth(-1);
 document.getElementById("nextp").onclick=()=>shiftMonth(1);
 document.getElementById("prevw").onclick=()=>shiftWeek(-1);
 document.getElementById("nextw").onclick=()=>shiftWeek(1);
+// 画面幅変化でカレンダーのチップ折返し高さを再計算
+let __rzT=null;
+window.addEventListener("resize",()=>{ clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
 document.getElementById("filter").onchange=renderBody;
 document.getElementById("search").addEventListener("input",renderBody);
 document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{ sortKey=b.dataset.sort; renderBody(); }));
