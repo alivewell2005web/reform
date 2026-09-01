@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v66</title>
+<title>リフォーム進捗管理アプリ v67</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -862,9 +862,7 @@ function renderCalendar(){
   let spans=collectSpans();
   spans.sort((a,b)=>a.start.localeCompare(b.start));
 
-  // スマホ縦：絶対配置レーンだと文字が省略されるため、セル内で折り返す簡易描画に切替
-  if(isPhonePortrait()){ renderCalendarFlow(spans, days); return; }
-  // ===== レーンモード：現場/業者で絞り込み時のみ、物件ごとに高さを揃える =====
+  // レーンモード（帯連結・同一物件を同じ高さ）。スマホ縦は横スクロールで各列を確保。
   const laneMode = (calSite!=="all" || vendorFiltered());
   renderCalendarLanes(spans, days, laneMode);
   return;
@@ -984,20 +982,26 @@ function renderCalendarLanes(spans, days, groupBySite){
   if(calView==="week") weeks=[days];
   else { for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7)); }
 
+  // スマホ縦は横スクロールで各列を広げる。列の最低幅とグリッド指定を切替
+  const scrollX = isPhonePortrait();
+  const COLMIN = 122;
+  const GTC = scrollX ? `grid-template-columns:repeat(7, minmax(${COLMIN}px,1fr));` : `grid-template-columns:repeat(7,1fr);`;
+  const innerMinPx = scrollX ? (COLMIN*7 + 4*6 + 4) : 0;
+
   const wd=["日","月","火","水","木","金","土"];
   let headRow;
   if(calView==="week"){
-    headRow=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px;">`+days.map(dt=>`<div style="text-align:center; font-size:11px; color:${dt.getDay()===0?'var(--text-danger)':dt.getDay()===6?'var(--text-accent)':'var(--text-secondary)'};">${wd[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}</div>`).join("")+`</div>`;
+    headRow=`<div style="display:grid; ${GTC} gap:4px; margin-bottom:4px;">`+days.map(dt=>`<div style="text-align:center; font-size:11px; color:${dt.getDay()===0?'var(--text-danger)':dt.getDay()===6?'var(--text-accent)':'var(--text-secondary)'};">${wd[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}</div>`).join("")+`</div>`;
   } else {
-    headRow=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px;">`+wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
+    headRow=`<div style="display:grid; ${GTC} gap:4px; margin-bottom:4px;">`+wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
   }
 
   const colW=100/7, topPad=26;
-  // 列の実ピクセル幅からチップ内の折返し行数を推定し、可変高で積む（PC/横画面の改行対応）
+  // チップ内の折返し行数を列幅から推定（可変高）。スマホ縦は最低列幅で計算
   const gridW=(document.getElementById("calgrid")||{}).clientWidth||840;
-  const colPx=gridW/7;
-  const chipInnerPx=Math.max(28, colPx-8-10);     // セル内チップの実効テキスト幅（左右padding込み）
-  const CHAR_PX=6.4, LH=14, VPAD=6;                // 10px日本語≒6.4px幅、行高14px、上下padding
+  const colPx=scrollX ? COLMIN : gridW/7;
+  const chipInnerPx=Math.max(28, colPx-8-10);
+  const CHAR_PX=6.4, LH=14, VPAD=6;
   const estLines=(txt)=>{ const s=String(txt||""); const perLine=Math.max(3, Math.floor(chipInnerPx/CHAR_PX)); return Math.max(1, Math.ceil([...s].length/perLine)); };
   const itemH=(txt)=> estLines(txt)*LH+VPAD;       // チップ高さ(px)
   let weeksHtml="";
@@ -1032,7 +1036,7 @@ function renderCalendarLanes(spans, days, groupBySite){
     const cellMinH=(calView==="week"?120:74);
 
     // セル本体
-    let cellsHtml=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; position:relative;">`;
+    let cellsHtml=`<div style="display:grid; ${GTC} gap:4px; position:relative;">`;
     week.forEach(dt=>{
       if(!dt){ cellsHtml+=`<div></div>`; return; }
       const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey), hol=holidayName(k);
@@ -1085,7 +1089,7 @@ function renderCalendarLanes(spans, days, groupBySite){
   });
 
   const grid=document.getElementById("calgrid");
-  grid.innerHTML=headRow+weeksHtml;
+  if(scrollX){ grid.innerHTML=`<div style="overflow-x:auto; -webkit-overflow-scrolling:touch;"><div style="min-width:${innerMinPx}px;">${headRow}${weeksHtml}</div></div>`; } else { grid.innerHTML=headRow+weeksHtml; }
   wireCalendar(grid);
 }
 
