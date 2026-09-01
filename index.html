@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v64</title>
+<title>リフォーム進捗管理アプリ v65</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -940,31 +940,37 @@ function renderCalendarFlow(spans, days){
   const tKey=todayKey();
   let weeks=[]; for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
   const wd=["日","月","火","水","木","金","土"];
-  let html=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:3px;">`+
-    wd.map((d,i)=>`<div style="text-align:center; font-size:10px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
+  const COLMIN=118;                       // 縦画面での1列の最低幅(px)。横スクロールで確保
+  const GTC=`grid-template-columns:repeat(7, minmax(${COLMIN}px, 1fr));`;
+  const innerMin=COLMIN*7+3*6+4;          // 内側の最低幅（列幅×7＋gap）
+  let inner=`<div style="min-width:${innerMin}px;">`;
+  inner+=`<div style="display:grid; ${GTC} gap:3px; margin-bottom:3px;">`+
+    wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
 
   weeks.forEach(week=>{
-    html+=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:3px; align-items:stretch;">`;
+    inner+=`<div style="display:grid; ${GTC} gap:3px; margin-bottom:3px; align-items:stretch;">`;
     week.forEach(dt=>{
       const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey), hol=holidayName(k);
       const isZeroHol = showZeroHolidays() && zeroHolidays.has(k);
       const dnumColor = isToday?'var(--text-accent)':((hol||dow===0)?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-secondary)');
       const cellBg = isToday?'var(--bg-accent-muted)':((hol||dow===0)?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
-      // その日に掛かる帯（開始日以外も表示）＋単日＋追加
       let chips="";
       spans.forEach(e=>{ if(k>=e.start&&k<=e.end){ const c=effColor(e.work,e.site,e.color); const bg=e.done?c.done:c.bg;
-        chips+=`<div class="span" data-spankey="${e.site.id}__${e.work}" style="cursor:pointer; touch-action:pan-y; background:${bg}; color:${c.fg}; font-size:10px; line-height:1.25; padding:2px 4px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`; } });
+        chips+=`<div class="span" data-spankey="${e.site.id}__${e.work}" style="cursor:pointer; touch-action:pan-y; background:${bg}; color:${c.fg}; font-size:11px; line-height:1.3; padding:3px 5px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`; } });
       singlesOnDay(k).forEach((e,i)=>{ const c=effColor(e.work,e.site,e.color);
-        chips+=`<div class="chip" data-chipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-y; background:${e.done?c.done:c.bg}; color:${c.fg}; font-size:10px; line-height:1.25; padding:2px 4px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`; });
+        chips+=`<div class="chip" data-chipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-y; background:${e.done?c.done:c.bg}; color:${c.fg}; font-size:11px; line-height:1.3; padding:3px 5px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`; });
       extraChipsOnDay(k).forEach((e,i)=>{
-        chips+=`<div class="xchip" data-xchipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-y; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; font-size:10px; line-height:1.25; padding:2px 4px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${extraChipLabel(e)}</div>`; });
+        chips+=`<div class="xchip" data-xchipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-y; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; font-size:11px; line-height:1.3; padding:3px 5px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${extraChipLabel(e)}</div>`; });
       const holLabel = (hol?`<div style="font-size:9px; color:var(--text-danger); line-height:1.15;">${hol}</div>`:'')
         +(isZeroHol?`<div style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.15;">ZERO休み</div>`:'');
-      html+=`<div class="daycell" data-day="${k}" style="min-height:52px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
-        <div style="font-size:11px; display:flex; align-items:center; gap:3px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getMonth()+1}/${dt.getDate()}${isToday?'<span style="font-size:8px; padding:0 3px; border-radius:3px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}${chips}</div>`;
+      inner+=`<div class="daycell" data-day="${k}" style="min-height:56px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
+        <div style="font-size:12px; display:flex; align-items:center; gap:3px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getMonth()+1}/${dt.getDate()}${isToday?'<span style="font-size:8px; padding:0 3px; border-radius:3px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}${chips}</div>`;
     });
-    html+=`</div>`;
+    inner+=`</div>`;
   });
+  inner+=`</div>`;
+  // 縦画面は横スクロールで各列を広げる
+  const html=`<div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">${inner}</div>`;
 
   const grid=document.getElementById("calgrid");
   grid.innerHTML=html;
