@@ -77,7 +77,7 @@ table{background:var(--surface-2);}
     <button id="clearfilters" style="display:none; font-size:12px; padding:3px 10px; align-items:center; gap:4px; color:var(--text-danger);"><i class="ti ti-filter-off" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> フィルター解除</button>
     <button id="addbtn" style="margin-left:auto;"><i class="ti ti-plus" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 新規現場</button>
   </div>
-  <div style="border:0.5px solid var(--border); border-radius:12px;">
+  <div id="matrixscroll" style="overflow:auto; max-height:calc(100vh - var(--tabbar-h) - 24px); border:0.5px solid var(--border); border-radius:12px; -webkit-overflow-scrolling:touch;">
     <table style="border-collapse:collapse; font-size:13px; min-width:1080px;"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
   </div>
   <div id="detail" style="margin-top:12px;"></div>
@@ -340,10 +340,10 @@ function openColFilter(key,anchorEl){
   });
 }
 function renderHead(){
-  const stTop=`position:sticky; top:var(--tabbar-h); z-index:3; background:var(--surface-1);`;
+  const stTop=`position:sticky; top:0; z-index:3; background:var(--surface-1);`;
   const extraTh=[["⑦","入居前清掃","movein"],["⑧","鍵交換","key"]].map(([num,n,fk])=>`<th style="${stTop} padding:8px 4px; text-align:center; min-width:84px; font-weight:400; font-size:13px; border-left:0.5px solid var(--border);">${num}${filterIcon(fk)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${n}</div></th>`).join("");
   document.getElementById("thead").innerHTML=`<tr style="color:var(--text-secondary);">
-    <th style="position:sticky; top:var(--tabbar-h); left:0; z-index:5; background:var(--surface-1); padding:9px 10px; text-align:left; min-width:186px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
+    <th style="position:sticky; top:0; left:0; z-index:5; background:var(--surface-1); padding:9px 10px; text-align:left; min-width:186px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
     <th style="${stTop} padding:9px 6px; text-align:center; min-width:56px; border-right:0.5px solid var(--border); font-size:13px;">区分${filterIcon("category")}</th>
     <th style="${stTop} padding:9px 6px; text-align:left; min-width:92px; border-right:0.5px solid var(--border); font-size:13px;">現在地${filterIcon("status")}</th>
     ${PHASES.map((p,idx)=>{const nm=p.slice(1).replace("・工程管理","<br>・工程管理").replace("・請求書発行","<br>・請求書発行"); return `<th style="${stTop} padding:8px 4px; text-align:center; min-width:72px; font-weight:400; font-size:13px;">${p.slice(0,1)}${filterIcon("phase"+idx)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${nm}</div></th>`;}).join("")}
@@ -2005,6 +2005,7 @@ document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   b.style.background="var(--text-accent)"; b.style.color="#fff"; b.style.borderColor="var(--text-accent)";
   document.getElementById("tab-matrix").style.display=(t==="matrix")?"block":"none";
   document.getElementById("tab-calendar").style.display=(t==="calendar")?"block":"none";
+  if(t==="matrix") sizeMatrixScroll();
 }));
 function setView(v){ calView=v;
   if(v==="week"){ weekFromToday=true; calAnchor=new Date(TODAY); }
@@ -2040,7 +2041,9 @@ document.getElementById("prevw").onclick=()=>{closeSpanEditor(); shiftWeek(-1);}
 document.getElementById("nextw").onclick=()=>{closeSpanEditor(); shiftWeek(1);};
 // 画面幅変化でカレンダーのチップ折返し高さを再計算
 let __rzT=null;
-function updateTabbarH(){ const t=document.getElementById("tabbar"); if(t) document.documentElement.style.setProperty("--tabbar-h", t.offsetHeight+"px"); }
+function updateTabbarH(){ const t=document.getElementById("tabbar"); if(t) document.documentElement.style.setProperty("--tabbar-h", t.offsetHeight+"px"); sizeMatrixScroll(); }
+function sizeMatrixScroll(){ const el=document.getElementById("matrixscroll"); if(!el) return; const top=el.getBoundingClientRect().top; const h=window.innerHeight-top-12; el.style.maxHeight=Math.max(240,h)+"px"; }
+window.addEventListener("scroll",()=>sizeMatrixScroll(),{passive:true});
 window.addEventListener("resize",()=>{ closeSpanEditor(); updateTabbarH(); clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
 // カレンダー内の横スクロールで帯がずれるため、スクロール開始時にポップアップを閉じる
 document.getElementById("calwrap").addEventListener("scroll",()=>closeSpanEditor(),true);
