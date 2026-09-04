@@ -99,19 +99,21 @@ table{background:var(--surface-2);}
     <button id="pdfbtn" style="font-size:13px;"><i class="ti ti-file-type-pdf" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 業者向けPDF</button>
   </div>
   <div id="unassigned" style="margin-bottom:10px; border:1px solid var(--border-strong); border-radius:10px; padding:10px 12px; background:var(--surface-1);"></div>
-  <div id="spanpop" style="display:none; margin-bottom:10px;">
-    <div style="background:var(--surface-2); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px;">
-      <div id="spantitle" style="font-size:13px; font-weight:500; margin-bottom:10px;"></div>
-      <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
-        <div style="display:flex; align-items:center; gap:6px;"><span id="spanstart" style="font-size:13px;"></span><button id="spanstartbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-        <div style="display:flex; align-items:center; gap:6px;"><span id="spanend" style="font-size:13px;"></span><button id="spanendbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-        <div style="display:flex; align-items:center; gap:6px;"><span id="spanact" style="font-size:13px;"></span><button id="spanactbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-        <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">業者：<b id="spanvendor"></b></span><button id="spanvendorbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-        <button id="spanclose" style="font-size:12px; padding:3px 10px; margin-left:auto;">閉じる</button>
+  <div id="calwrap" style="position:relative;">
+    <div id="calgrid" style="position:relative; user-select:none;"></div>
+    <div id="spanpop" style="display:none; position:absolute; z-index:50; width:min(420px,92%); box-shadow:0 8px 28px rgba(0,0,0,.22);">
+      <div style="background:var(--surface-2); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px;">
+        <div id="spantitle" style="font-size:13px; font-weight:500; margin-bottom:10px;"></div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+          <div style="display:flex; align-items:center; gap:6px;"><span id="spanstart" style="font-size:13px;"></span><button id="spanstartbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+          <div style="display:flex; align-items:center; gap:6px;"><span id="spanend" style="font-size:13px;"></span><button id="spanendbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+          <div style="display:flex; align-items:center; gap:6px;"><span id="spanact" style="font-size:13px;"></span><button id="spanactbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+          <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">業者：<b id="spanvendor"></b></span><button id="spanvendorbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+          <button id="spanclose" style="font-size:12px; padding:3px 10px; margin-left:auto;">閉じる</button>
+        </div>
       </div>
     </div>
   </div>
-  <div id="calgrid" style="position:relative; user-select:none;"></div>
   <div id="calcolorpicker" style="display:none; margin-top:10px;"></div>
   <div id="legend" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; margin-bottom:6px;"></div>
   <div id="calhint" style="font-size:12px; color:var(--text-secondary);"></div>
@@ -1111,7 +1113,7 @@ function wireCalendar(grid){
   grid.querySelectorAll(".span").forEach(el=>{
     const [id,w]=el.dataset.spankey.split("__");
     const s=sites.find(x=>x.id===Number(id)); const wk=s.works[w]; const c=effColor(w,s,wk.calColor);
-    el.addEventListener("pointerdown",(e)=>{ if(!isPhone()){ e.preventDefault(); e.stopPropagation(); } startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>{ openSpanEditor(s,w); if(singleVendorFilter()) showColorPicker({kind:"span",id:Number(id),w}); }}); });
+    el.addEventListener("pointerdown",(e)=>{ if(!isPhone()){ e.preventDefault(); e.stopPropagation(); } startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>{ openSpanEditor(s,w,el); if(singleVendorFilter()) showColorPicker({kind:"span",id:Number(id),w}); }}); });
   });
   grid.querySelectorAll(".chip").forEach(el=>{
     const [k,idx]=el.dataset.chipkey.split("__");
@@ -1229,16 +1231,38 @@ function selectPick(id,w,ix){
 }
 function hintPick(msg){ const h=document.getElementById("calhint"); if(msg) h.textContent=msg; }
 
-function closeSpanEditor(){ const w=document.getElementById("spanpop"); if(w) w.style.display="none"; }
-function openSpanEditor(s,w){
+function closeSpanEditor(){ const w=document.getElementById("spanpop"); if(w) w.style.display="none"; _lastSpanAnchor=null; }
+let _lastSpanAnchor=null;
+function positionSpanPop(wrap,anchorEl){
+  const cw=document.getElementById("calwrap"); if(!cw||!anchorEl) return;
+  const cr=cw.getBoundingClientRect(), ar=anchorEl.getBoundingClientRect();
+  wrap.style.visibility="hidden"; wrap.style.display="block";
+  const pw=wrap.offsetWidth, ph=wrap.offsetHeight;
+  let top=ar.bottom-cr.top+4;                       // 帯の直下
+  let left=ar.left-cr.left;                          // 帯の左に揃える
+  const maxLeft=cw.clientWidth-pw; if(left>maxLeft) left=maxLeft; if(left<0) left=0;
+  // 下にはみ出す場合は帯の上に出す
+  if(ar.bottom-cr.top+4+ph>cw.scrollHeight && ar.top-cr.top-ph-4>0){ top=ar.top-cr.top-ph-4; }
+  wrap.style.top=top+"px"; wrap.style.left=left+"px";
+  wrap.style.visibility="visible";
+}
+function openSpanEditor(s,w,anchorEl){
   const wk=s.works[w];
   const wrap=document.getElementById("spanpop");
+  if(anchorEl) _lastSpanAnchor=anchorEl;
+  // 再描画で元の帯要素が外れた場合は、同じ帯(spankey)を探し直す
+  if(!_lastSpanAnchor || !document.body.contains(_lastSpanAnchor)){
+    const key=`${s.id}__${w}`;
+    const cand=document.querySelector(`#calgrid .span[data-spankey="${key}"]`);
+    if(cand) _lastSpanAnchor=cand;
+  }
   document.getElementById("spantitle").textContent=`${w} — ${s.name} ${s.room}号室`;
   document.getElementById("spanstart").innerHTML=`開始：<b>${fmt(wk.start)||'—'}</b>`;
   document.getElementById("spanend").innerHTML=`完了予定：<b>${fmt(wk.end)||'—'}</b>`;
   document.getElementById("spanact").innerHTML=`実績：<b>${fmt(wk.act)||'未'}</b>`;
   document.getElementById("spanvendor").textContent=wk.vendor||"未設定";
   wrap.style.display="block";
+  positionSpanPop(wrap,_lastSpanAnchor);
   document.getElementById("spanstartbtn").onclick=(ev)=>editSpanDate(s,w,"start",ev.currentTarget,()=>openSpanEditor(s,w));
   document.getElementById("spanendbtn").onclick=(ev)=>editSpanDate(s,w,"end",ev.currentTarget,()=>openSpanEditor(s,w));
   document.getElementById("spanactbtn").onclick=(ev)=>openDateInline(ev.currentTarget,wk.act,v=>{wk.act=v; syncAndRefresh(s); openSpanEditor(s,w);});
@@ -2011,7 +2035,9 @@ document.getElementById("prevw").onclick=()=>{closeSpanEditor(); shiftWeek(-1);}
 document.getElementById("nextw").onclick=()=>{closeSpanEditor(); shiftWeek(1);};
 // 画面幅変化でカレンダーのチップ折返し高さを再計算
 let __rzT=null;
-window.addEventListener("resize",()=>{ clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
+window.addEventListener("resize",()=>{ closeSpanEditor(); clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
+// カレンダー内の横スクロールで帯がずれるため、スクロール開始時にポップアップを閉じる
+document.getElementById("calwrap").addEventListener("scroll",()=>closeSpanEditor(),true);
 document.getElementById("filter").onchange=renderBody;
 document.getElementById("search").addEventListener("input",renderBody);
 document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{ sortKey=b.dataset.sort; renderBody(); }));
