@@ -98,11 +98,23 @@ table{background:var(--surface-2);}
     <button id="zeroholbtn" style="display:none; font-size:13px;"><i class="ti ti-calendar-off" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> ZERO休み登録</button>
     <button id="pdfbtn" style="font-size:13px;"><i class="ti ti-file-type-pdf" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 業者向けPDF</button>
   </div>
-  <div id="legend" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;"></div>
-  <div id="calhint" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;"></div>
+  <div id="unassigned" style="margin-bottom:10px; border:1px solid var(--border-strong); border-radius:10px; padding:10px 12px; background:var(--surface-1);"></div>
+  <div id="spanpop" style="display:none; margin-bottom:10px;">
+    <div style="background:var(--surface-2); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px;">
+      <div id="spantitle" style="font-size:13px; font-weight:500; margin-bottom:10px;"></div>
+      <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+        <div style="display:flex; align-items:center; gap:6px;"><span id="spanstart" style="font-size:13px;"></span><button id="spanstartbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+        <div style="display:flex; align-items:center; gap:6px;"><span id="spanend" style="font-size:13px;"></span><button id="spanendbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+        <div style="display:flex; align-items:center; gap:6px;"><span id="spanact" style="font-size:13px;"></span><button id="spanactbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+        <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">業者：<b id="spanvendor"></b></span><button id="spanvendorbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+        <button id="spanclose" style="font-size:12px; padding:3px 10px; margin-left:auto;">閉じる</button>
+      </div>
+    </div>
+  </div>
   <div id="calgrid" style="position:relative; user-select:none;"></div>
   <div id="calcolorpicker" style="display:none; margin-top:10px;"></div>
-  <div id="unassigned" style="margin-top:14px;"></div>
+  <div id="legend" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; margin-bottom:6px;"></div>
+  <div id="calhint" style="font-size:12px; color:var(--text-secondary);"></div>
 </div>
 </div>
 
@@ -324,7 +336,7 @@ function openColFilter(key,anchorEl){
 function renderHead(){
   const extraTh=[["⑦","入居前清掃","movein"],["⑧","鍵交換","key"]].map(([num,n,fk])=>`<th style="padding:8px 4px; text-align:center; min-width:84px; font-weight:400; font-size:13px; border-left:0.5px solid var(--border);">${num}${filterIcon(fk)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${n}</div></th>`).join("");
   document.getElementById("thead").innerHTML=`<tr style="background:var(--surface-1); color:var(--text-secondary);">
-    <th style="padding:9px 10px; text-align:left; position:sticky; left:0; z-index:2; background:var(--surface-1); min-width:170px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
+    <th style="padding:9px 10px; text-align:left; position:sticky; left:0; z-index:2; background:var(--surface-1); min-width:186px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
     <th style="padding:9px 6px; text-align:center; min-width:56px; border-right:0.5px solid var(--border); font-size:13px;">区分${filterIcon("category")}</th>
     <th style="padding:9px 6px; text-align:left; min-width:92px; border-right:0.5px solid var(--border); font-size:13px;">現在地${filterIcon("status")}</th>
     ${PHASES.map((p,idx)=>{const nm=p.slice(1).replace("・工程管理","<br>・工程管理").replace("・請求書発行","<br>・請求書発行"); return `<th style="padding:8px 4px; text-align:center; min-width:72px; font-weight:400; font-size:13px;">${p.slice(0,1)}${filterIcon("phase"+idx)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${nm}</div></th>`;}).join("")}
@@ -1104,14 +1116,14 @@ function wireCalendar(grid){
   grid.querySelectorAll(".chip").forEach(el=>{
     const [k,idx]=el.dataset.chipkey.split("__");
     const list=singlesOnDay(k); const e=list[Number(idx)]; if(!e) return; const c=effColor(e.work,e.site,e.color);
-    el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); if(singleVendorFilter()) showColorPicker(e.ref); }}); });
+    el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ closeSpanEditor(); const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); if(singleVendorFilter()) showColorPicker(e.ref); }}); });
   });
   grid.querySelectorAll(".xchip").forEach(el=>{
     const [k,idx]=el.dataset.xchipkey.split("__");
     const list=extraChipsOnDay(k); const e=list[Number(idx)]; if(!e) return;
     if(e.kind==="mtg"){
       el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"mtg",id:e.site.id,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
-        const s=sites.find(x=>x.id===e.site.id);
+        const s=sites.find(x=>x.id===e.site.id); closeSpanEditor();
         openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{ s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh(); },s.mtgEndTime,s.attendee);
       }}); });
       return;
@@ -1120,7 +1132,7 @@ function wireCalendar(grid){
       // ②③⑤⑥：ドラッグで日付移動、クリックで編集。実績があれば実績を、なければ予定を動かす
       const usesAct = !!e.site.act[e.phaseIdx];
       el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"phase",id:e.site.id,phaseIdx:e.phaseIdx,useAct:usesAct,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
-        const s=sites.find(x=>x.id===e.site.id); const i=e.phaseIdx;
+        const s=sites.find(x=>x.id===e.site.id); const i=e.phaseIdx; closeSpanEditor();
         if(s.act[i]) openDateInline(el,s.act[i],v=>{ s.act[i]=v; refresh(); });
         else openDateInline(el,s.plan[i],v=>{ s.plan[i]=v; refresh(); });
       }}); });
@@ -1128,7 +1140,7 @@ function wireCalendar(grid){
     }
     const field = e.kind==="movein" ? "moveinClean" : "keyChange";
     el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"extra",id:e.site.id,field,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
-      const s=sites.find(x=>x.id===e.site.id);
+      const s=sites.find(x=>x.id===e.site.id); closeSpanEditor();
       let opts={}; if(field==="keyChange"&&s.plan[3]) opts.min=dateAdd(s.plan[3],1);
       openDateInline(el,s[field].done,v=>{ if(field==="keyChange"&&v&&s.plan[3]&&v<=s.plan[3]){ alert(`鍵交換の実施日は、④工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return; } s[field].done=v; refresh(); }, opts);
     }}); });
@@ -1197,7 +1209,7 @@ function renderUnassigned(){
   ua.querySelectorAll("[data-pi]").forEach(el=>{
     const it=list[Number(el.dataset.pi)]; const c=WORKCOLOR[it.w];
     const nm=(it.ix!=null&&it.name)?`（${it.name}）`:"";
-    el.addEventListener("pointerdown",(e)=>{ e.preventDefault(); startDrag(el,e,{type:"new",id:it.s.id,w:it.w,ix:it.ix,label:`[${WORKABBR[it.w]}]${it.s.name} ${it.s.room}${nm}`,bg:c.bg,fg:c.fg,onClick:()=>selectPick(it.s.id,it.w,it.ix)}); });
+    el.addEventListener("pointerdown",(e)=>{ e.preventDefault(); closeSpanEditor(); startDrag(el,e,{type:"new",id:it.s.id,w:it.w,ix:it.ix,label:`[${WORKABBR[it.w]}]${it.s.name} ${it.s.room}${nm}`,bg:c.bg,fg:c.fg,onClick:()=>selectPick(it.s.id,it.w,it.ix)}); });
   });
 }
 let pickedSite=null, pickedWork=null, pickedIx=null, spanStart=null;
@@ -1217,6 +1229,7 @@ function selectPick(id,w,ix){
 }
 function hintPick(msg){ const h=document.getElementById("calhint"); if(msg) h.textContent=msg; }
 
+function closeSpanEditor(){ const w=document.getElementById("spanpop"); if(w) w.style.display="none"; }
 function openSpanEditor(s,w){
   const wk=s.works[w];
   const wrap=document.getElementById("spanpop");
@@ -1233,7 +1246,7 @@ function openSpanEditor(s,w){
     const cur=wk.vendor||""; const v=prompt("業者名（空欄で未設定）\n登録済み: "+vendorMaster.join(" / "), cur);
     if(v!==null){ const nv=v.trim(); wk.vendor=nv||null; if(nv&&!vendorMaster.includes(nv))vendorMaster.push(nv); refresh(); openSpanEditor(s,w); }
   };
-  document.getElementById("spanclose").onclick=()=>{wrap.style.display="none";};
+  document.getElementById("spanclose").onclick=()=>closeSpanEditor();
 }
 
 // 日付部分クリックでその場にカレンダーを開き、日付選択で即反映（確定ボタンなし）
@@ -1693,7 +1706,7 @@ function buildPdfCore(vendor, days, perLabel, inMonth){
   let html=`<div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:6px;">
       <div>
         <div style="font-size:18px; font-weight:700;">工事予定表 — ${escapeHtml(vendor)} 御中</div>
-        <div style="font-size:13px; color:#333; margin-top:2px;">対象期間：${perLabel}</div>
+        <div style="font-size:16px; font-weight:700; color:#000; margin-top:3px;">対象期間：${perLabel}</div>
       </div>
       <div style="font-size:11px; color:#555; text-align:right;">アライヴグループ<br>発行日：${fmt(tKey)}</div>
     </div>`;
@@ -1703,7 +1716,6 @@ function buildPdfCore(vendor, days, perLabel, inMonth){
   if(usedWorks.length){
     html+=`<div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px; font-size:11px;">`+
       usedWorks.map(w=>{const c=WORKCOLOR[w]; return `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:11px; height:11px; border-radius:2px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("")+
-      (vendor==="ZERO"&&usedWorks.includes("クリーニング") ? `<span style="color:#666;">｜清掃色＝請求先：</span>`+Object.keys(ZERO_BILL_COLOR).map(b=>{const c=ZERO_BILL_COLOR[b]; return `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:11px; height:11px; border-radius:2px; background:${c.done}; border:1px solid ${c.fg};"></span>${b}</span>`;}).join("") : "")+
       `<span style="color:#666;">（濃い色＝完了済み）</span></div>`;
   }
 
@@ -1787,20 +1799,21 @@ function buildPdfCore(vendor, days, perLabel, inMonth){
     siteOrder.forEach(s=>{ const wk=s.works["クリーニング"]; if(wk){ tClean+=Number(wk.cleanFee||0); tAc+=Number(wk.acFee||0); tPeel+=Number(wk.peelFee||0);} });
     const grand=tClean+tAc+tPeel;
 
-    const naisoHead = showNaiso ? `<th style="padding:4px 6px; border:0.5px solid #ccc;">内装完了</th>` : "";
+    const naisoHead = showNaiso ? `<th style="padding:4px 4px; border:0.5px solid #ccc; text-align:center;">内装<br>完了</th>` : "";
     const moneyHead = showMoney ? `
-            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">清掃費</th>
-            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">エアコン</th>
-            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">剥離</th>` : "";
+            <th style="padding:4px 4px; border:0.5px solid #ccc; text-align:center;">清掃費</th>
+            <th style="padding:4px 4px; border:0.5px solid #ccc; text-align:center;">エアコン</th>
+            <th style="padding:4px 4px; border:0.5px solid #ccc; text-align:center;">剥離</th>` : "";
 
-    // 列幅（table-layout:fixed）。左側を詰めて備考を最大化。
+    // 列幅（table-layout:fixed）。作業予定日/内装/家具/金額は狭く、請求先は広く折返しなし、備考は最大。
+    const MONEY_W=8.5;                     // 清掃費・エアコン・剥離（合計がはみ出さない幅）
     const colsPct=[];
-    colsPct.push(9);                       // 作業予定日
-    colsPct.push(15);                      // 現場名
-    if(showNaiso) colsPct.push(7);         // 内装完了
-    colsPct.push(6);                       // 請求先
+    colsPct.push(5.5);                     // 作業予定日（内装完了と同幅）
+    colsPct.push(19);                      // 現場名
+    if(showNaiso) colsPct.push(5.5);       // 内装完了
+    colsPct.push(11);                      // 請求先（レジデンシャルが収まる幅）
     colsPct.push(5);                       // 家具
-    if(showMoney){ colsPct.push(8,8,7); }  // 清掃費・エアコン・剥離
+    if(showMoney){ colsPct.push(MONEY_W,MONEY_W,MONEY_W); } // 清掃費・エアコン・剥離（同一幅）
     colsPct.push(9);                       // オートロック
     const usedPct=colsPct.reduce((a,b)=>a+b,0);
     const notePct=Math.max(20,100-usedPct);// 備考（残り全部）
@@ -1816,44 +1829,45 @@ function buildPdfCore(vendor, days, perLabel, inMonth){
         <div style="font-size:14px; font-weight:700; margin-bottom:6px; border-bottom:1.5px solid #333; padding-bottom:3px; text-align:center;">現場名一覧（${escapeHtml(vendor)}）${pages>1?` <span style="font-size:11px; font-weight:400;">${p+1}/${pages}ページ</span>`:''}</div>
         <table style="width:100%; border-collapse:collapse; font-size:10.5px; table-layout:fixed;">
           ${colgroup}
-          <thead><tr style="background:#f0efea; text-align:left;">
-            <th style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">作業予定日</th>
-            <th style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">現場名</th>${naisoHead}
-            <th style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">請求先</th>
-            <th style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">家具</th>${moneyHead}
-            <th style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">オートロック</th>
-            <th style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">備考</th>
+          <thead><tr style="background:#f0efea;">
+            <th style="padding:4px 4px; border:0.5px solid #ccc; text-align:center;">作業<br>予定日</th>
+            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:center;">現場名</th>${naisoHead}
+            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:center;">請求先</th>
+            <th style="padding:4px 4px; border:0.5px solid #ccc; text-align:center;">家具</th>${moneyHead}
+            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:center;">オートロック</th>
+            <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:center;">備考</th>
           </tr></thead><tbody>`;
       chunk.forEach(s=>{
         const rf=s.works["リフォーム"]; const naiso=rf&&rf.end?fmt(rf.end):"";
         const wk=s.works["クリーニング"]||{};
         const furn=s.furniture==="あり"?"あり":"";  // なしは空欄
-        const naisoCell = showNaiso ? `<td style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">${naiso}</td>` : "";
+        const naisoCell = showNaiso ? `<td style="padding:4px 4px; border:0.5px solid #ccc; text-align:center; white-space:nowrap;">${naiso}</td>` : "";
         const moneyCells = showMoney ? `
-          <td style="padding:4px 6px; border:0.5px solid #ccc; text-align:right; word-break:break-all;">${yen(wk.cleanFee)}</td>
-          <td style="padding:4px 6px; border:0.5px solid #ccc; text-align:right; word-break:break-all;">${yen(wk.acFee)}</td>
-          <td style="padding:4px 6px; border:0.5px solid #ccc; text-align:right; word-break:break-all;">${yen(wk.peelFee)}</td>` : "";
+          <td style="padding:4px 4px; border:0.5px solid #ccc; text-align:right; white-space:nowrap;">${yen(wk.cleanFee)}</td>
+          <td style="padding:4px 4px; border:0.5px solid #ccc; text-align:right; white-space:nowrap;">${yen(wk.acFee)}</td>
+          <td style="padding:4px 4px; border:0.5px solid #ccc; text-align:right; white-space:nowrap;">${yen(wk.peelFee)}</td>` : "";
         listHtml+=`<tr>
-          <td style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">${workDateForSite(s)}</td>
-          <td style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">${escapeHtml(siteLabel(s))}号室</td>${naisoCell}
-          <td style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">${escapeHtml(s.billTo||"")}</td>
-          <td style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">${furn}</td>${moneyCells}
+          <td style="padding:4px 4px; border:0.5px solid #ccc; text-align:center; white-space:nowrap;">${workDateForSite(s)}</td>
+          <td style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">${escapeHtml(s.name)}<br>${escapeHtml(s.room)}号室</td>${naisoCell}
+          <td style="padding:4px 6px; border:0.5px solid #ccc; white-space:nowrap;">${escapeHtml(s.billTo||"")}</td>
+          <td style="padding:4px 4px; border:0.5px solid #ccc; text-align:center;">${furn}</td>${moneyCells}
           <td style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">${escapeHtml(s.autolock||"")}</td>
           <td style="padding:4px 6px; border:0.5px solid #ccc; white-space:pre-wrap; word-break:break-all;">${escapeHtml(s.note||"")}</td>
         </tr>`;
       });
       // 合計・総合計行は最終ページ、金額列表示時のみ
       if(isLast && showMoney){
+        const monthLabel=(perLabel.match(/(\d+)月/)||[])[0] ? ((perLabel.match(/(\d+)月/)[1])+"月分") : "";
         const leadCols = 2 + (showNaiso?1:0) + 2; // 作業予定日,現場名,(内装完了),請求先,家具
         listHtml+=`<tr style="background:#eef1ee; font-weight:700;">
-          <td colspan="${leadCols}" style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">合計</td>
-          <td style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${yen(tClean)}</td>
-          <td style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${yen(tAc)}</td>
-          <td style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${yen(tPeel)}</td>
+          <td colspan="${leadCols}" style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${monthLabel}合計</td>
+          <td style="padding:5px 4px; border:0.5px solid #ccc; text-align:right; white-space:nowrap;">${yen(tClean)}</td>
+          <td style="padding:5px 4px; border:0.5px solid #ccc; text-align:right; white-space:nowrap;">${yen(tAc)}</td>
+          <td style="padding:5px 4px; border:0.5px solid #ccc; text-align:right; white-space:nowrap;">${yen(tPeel)}</td>
           <td colspan="2" style="padding:5px 6px; border:0.5px solid #ccc;"></td>
         </tr>
         <tr style="background:#e2e8dd; font-weight:700;">
-          <td colspan="${leadCols}" style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">総合計（清掃費＋エアコン＋剥離）</td>
+          <td colspan="${leadCols}" style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${monthLabel}総合計（清掃費＋エアコン＋剥離）</td>
           <td colspan="3" style="padding:5px 6px; border:0.5px solid #ccc; text-align:right;">${yen(grand)}</td>
           <td colspan="2" style="padding:5px 6px; border:0.5px solid #ccc;"></td>
         </tr>`;
@@ -1957,6 +1971,7 @@ function openZeroHolidayModal(){
 
 document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   const t=b.dataset.tab;
+  closeSpanEditor();
   document.querySelectorAll(".tabbtn").forEach(x=>{x.style.background="var(--surface-2)"; x.style.color="var(--text-secondary)"; x.style.borderColor="var(--border-strong)";});
   b.style.background="var(--text-accent)"; b.style.color="#fff"; b.style.borderColor="var(--text-accent)";
   document.getElementById("tab-matrix").style.display=(t==="matrix")?"block":"none";
@@ -1971,11 +1986,11 @@ function setView(v){ calView=v;
   document.getElementById("viewweek").style.background=v==="week"?"var(--surface-3)":"transparent";
   renderCalendar();
 }
-document.getElementById("viewmonth").onclick=()=>setView("month");
-document.getElementById("viewweek").onclick=()=>setView("week");
-document.getElementById("sitesel").addEventListener("change",e=>{calSite=e.target.value; renderCalendar();});
-document.getElementById("worksel").addEventListener("change",e=>{calWork=e.target.value; renderCalendar();});
-document.getElementById("vendorsel").addEventListener("change",e=>{calVendor=e.target.value; renderCalendar();});
+document.getElementById("viewmonth").onclick=()=>{closeSpanEditor(); setView("month");};
+document.getElementById("viewweek").onclick=()=>{closeSpanEditor(); setView("week");};
+document.getElementById("sitesel").addEventListener("change",e=>{closeSpanEditor(); calSite=e.target.value; renderCalendar();});
+document.getElementById("worksel").addEventListener("change",e=>{closeSpanEditor(); calWork=e.target.value; renderCalendar();});
+document.getElementById("vendorsel").addEventListener("change",e=>{closeSpanEditor(); calVendor=e.target.value; renderCalendar();});
 // 週送り（両ビュー共通、±7日スライド）
 function shiftWeek(delta){
   if(calView==="week"){
@@ -1990,10 +2005,10 @@ function shiftMonth(delta){
   else { calAnchor=new Date(calAnchor.getFullYear(),calAnchor.getMonth()+delta,1); }
   renderCalendar();
 }
-document.getElementById("prevp").onclick=()=>shiftMonth(-1);
-document.getElementById("nextp").onclick=()=>shiftMonth(1);
-document.getElementById("prevw").onclick=()=>shiftWeek(-1);
-document.getElementById("nextw").onclick=()=>shiftWeek(1);
+document.getElementById("prevp").onclick=()=>{closeSpanEditor(); shiftMonth(-1);};
+document.getElementById("nextp").onclick=()=>{closeSpanEditor(); shiftMonth(1);};
+document.getElementById("prevw").onclick=()=>{closeSpanEditor(); shiftWeek(-1);};
+document.getElementById("nextw").onclick=()=>{closeSpanEditor(); shiftWeek(1);};
 // 画面幅変化でカレンダーのチップ折返し高さを再計算
 let __rzT=null;
 window.addEventListener("resize",()=>{ clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
@@ -2110,19 +2125,6 @@ if(GAS_URL){
     <button id="datecancel" style="font-size:13px;">取消</button>
   </div>
 </div>
-<div id="spanpop" style="display:none; min-height:0;">
-  <div style="margin-top:10px; background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:12px; padding:14px;">
-    <div id="spantitle" style="font-size:13px; font-weight:500; margin-bottom:10px;"></div>
-    <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
-      <div style="display:flex; align-items:center; gap:6px;"><span id="spanstart" style="font-size:13px;"></span><button id="spanstartbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-      <div style="display:flex; align-items:center; gap:6px;"><span id="spanend" style="font-size:13px;"></span><button id="spanendbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-      <div style="display:flex; align-items:center; gap:6px;"><span id="spanact" style="font-size:13px;"></span><button id="spanactbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-      <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">業者：<b id="spanvendor"></b></span><button id="spanvendorbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-      <button id="spanclose" style="font-size:12px; padding:3px 10px; margin-left:auto;">閉じる</button>
-    </div>
-  </div>
-</div>
-
 </div>
 </body>
 </html>
