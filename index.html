@@ -31,10 +31,10 @@ table{background:var(--surface-2);}
 .tabbtn{background:transparent;}
 .viewbtn{background:transparent;}
 #app{max-width:1200px; margin:0 auto;}
-@media (max-width:640px){
-  /* スマホではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
-  #calgrid{ touch-action:pan-y !important; }
-  #calgrid .chip, #calgrid .xchip, #calgrid .span{ touch-action:pan-y !important; cursor:pointer !important; }
+@media (max-width:640px), (pointer:coarse){
+  /* タッチ端末ではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
+  #calgrid{ touch-action:pan-x pan-y pinch-zoom !important; }
+  #calgrid .chip, #calgrid .xchip, #calgrid .span{ touch-action:pan-x pan-y pinch-zoom !important; cursor:pointer !important; }
 }
 </style>
 </head>
@@ -65,6 +65,7 @@ table{background:var(--surface-2);}
     <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px;">
     <select id="filter" style="width:auto; min-width:130px;"><option value="incomplete">未完了のみ</option><option value="all">すべて表示</option></select>
     <span style="font-size:12px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;">並べ替え：
+      <button class="sortbtn" data-sort="created" style="font-size:12px; padding:3px 10px;">登録順</button>
       <button class="sortbtn" data-sort="phase" style="font-size:12px; padding:3px 10px;">現在地</button>
       <button class="sortbtn" data-sort="name" style="font-size:12px; padding:3px 10px;">現場名</button>
       <button class="sortbtn" data-sort="date1" style="font-size:12px; padding:3px 10px;">①立会日</button>
@@ -88,15 +89,19 @@ table{background:var(--surface-2);}
       <button id="viewweek" class="viewbtn" style="border:none; border-radius:0; padding:5px 14px; font-size:13px; color:var(--text-secondary);">週</button>
     </div>
     <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
-      <button id="prevp" aria-label="前へ" style="padding:4px 10px;"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
+      <button id="prevp" aria-label="前月へ" title="前の月" style="padding:4px 8px;"><i class="ti ti-chevrons-left" aria-hidden="true"></i></button>
+      <button id="prevw" aria-label="前週へ" title="1週前へ" style="padding:4px 8px; font-size:12px;"><i class="ti ti-chevron-left" aria-hidden="true"></i>週</button>
       <span id="perlabel" style="font-weight:500; min-width:150px; text-align:center;"></span>
-      <button id="nextp" aria-label="次へ" style="padding:4px 10px;"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button id="nextw" aria-label="翌週へ" title="1週後へ" style="padding:4px 8px; font-size:12px;">週<i class="ti ti-chevron-right" aria-hidden="true"></i></button>
+      <button id="nextp" aria-label="翌月へ" title="次の月" style="padding:4px 8px;"><i class="ti ti-chevrons-right" aria-hidden="true"></i></button>
     </div>
+    <button id="zeroholbtn" style="display:none; font-size:13px;"><i class="ti ti-calendar-off" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> ZERO休み登録</button>
     <button id="pdfbtn" style="font-size:13px;"><i class="ti ti-file-type-pdf" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 業者向けPDF</button>
   </div>
   <div id="legend" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;"></div>
   <div id="calhint" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;"></div>
-  <div id="calgrid" style="position:relative; user-select:none; touch-action:none;"></div>
+  <div id="calgrid" style="position:relative; user-select:none;"></div>
+  <div id="calcolorpicker" style="display:none; margin-top:10px;"></div>
   <div id="unassigned" style="margin-top:14px;"></div>
 </div>
 </div>
@@ -112,7 +117,7 @@ const EXTRA_MTG   ={key:"退去立会",   abbr:"立会",    color:{bg:"#E0E7FF",
 const PHASE_MILESTONE_COLOR={bg:"#F1F5F9",done:"#64748B",fg:"#334155"}; // ②③⑤⑥の工程チップ色
 const WORKDEF={"リフォーム":{type:"span"},"クリーニング":{type:"single"},"設備交換":{type:"multi"},"リペア":{type:"single"},"畳・ふすま":{type:"single"},"設備廃棄":{type:"single"},"その他":{type:"multi"}};
 const WORKS=Object.keys(WORKDEF);
-const WORKABBR={"リフォーム":"内装","クリーニング":"清掃","設備交換":"設備","リペア":"リペア","畳・ふすま":"畳・襖","設備廃棄":"廃棄","その他":"他"};
+const WORKABBR={"リフォーム":"内装","クリーニング":"清掃","設備交換":"設備","リペア":"ﾘﾍﾟｱ","畳・ふすま":"畳・襖","設備廃棄":"廃棄","その他":"他"};
 const WORKCOLOR={
   "リフォーム":{bg:"#BFDBFE",done:"#3B82F6",fg:"#1E3A8A"},
   "クリーニング":{bg:"#A7F3D0",done:"#10B981",fg:"#065F46"},
@@ -122,20 +127,36 @@ const WORKCOLOR={
   "設備廃棄":{bg:"#D1D5DB",done:"#6B7280",fg:"#374151"},
   "その他":{bg:"#A5F3FC",done:"#06B6D4",fg:"#155E75"},
 };
-let vendorMaster=["アルファ","ZERO","大松","シャムス","森上","ガリバー"];
+let vendorMaster=["ｱﾙﾌｧ","ZERO","大松","ｼｬﾑｽ","森上","ｶﾞﾘﾊﾞｰ"];
 // 物件（マンション）マスタ。新規現場登録時のプルダウン候補。編集は「接続設定」内の物件マスタ管理から。
 let buildingMaster=["Gran Bridge Dempo","ウェルホームズ中之島北","ネット　フローラ立売堀","ネットフローラ天満橋","パークアクシスうつぼ公園","パークキューブ北浜","パークタワー梅田","パークタワー北浜","芦屋ガーデン","西天満レジデンス","大阪福島タワー","天満橋ケルスコート","天満橋ケルスコートParkView","堂島レジデンス","北梅田パーク・レジデンス","GateCourt豊中","パークノヴァ西岡本","グランシャリオ夙川","Crescent-T","ヌーヴェレールⅢ","壱番館","GateCourt大阪福島","パークフラッツ弁天町駅前","パークフラッツ安堂寺町","MidCourtウメキタ","MidCourt東三国","GateCourt東三国","パークフラッツ東三国","FS江坂広芝町Ⅱ","GateCourt新大阪North","GateCourt福島海老江","FS福島パークサイド","FF江坂江の木町パークサイド"];
 // 工事種別ごとのデフォルト担当業者
-const DEFAULT_VENDOR={"リフォーム":"アルファ","クリーニング":"ZERO","設備交換":"大松","リペア":"シャムス","畳・ふすま":"森上","設備廃棄":"ガリバー","その他":null};
+const DEFAULT_VENDOR={"リフォーム":"ｱﾙﾌｧ","クリーニング":"ZERO","設備交換":"大松","リペア":"ｼｬﾑｽ","畳・ふすま":"森上","設備廃棄":"ｶﾞﾘﾊﾞｰ","その他":null};
+
+// 立会者の選択肢（①退去立会）
+const ATTENDEES=["鵜飼","野間元","秀島","西谷","森","現調"];
+// アルファ＆ZERO 複合フィルタ用の特殊値
+const VENDOR_AZ="__alpha_zero__";
+const AZ_VENDORS=["ｱﾙﾌｧ","ZERO"];
+// ZEROクリーニングの請求先別の色（ZEROのみ絞り込み時に適用）
+const ZERO_BILL_COLOR={"ウエル":{bg:"#BAE6FD",done:"#0EA5E9",fg:"#075985"},"デザイン":{bg:"#FBCFE8",done:"#EC4899",fg:"#9D174D"},"レジデンシャル":WORKCOLOR["クリーニング"]};
+// 要件6：1社絞り込み時に使えるカスタム色パレット
+const CAL_PALETTE=[
+  {name:"青",   bg:"#60A5FA",done:"#2563EB",fg:"#FFFFFF"},
+  {name:"緑",   bg:"#34D399",done:"#059669",fg:"#FFFFFF"},
+  {name:"黄",   bg:"#FBBF24",done:"#D97706",fg:"#78350F"},
+  {name:"桃",   bg:"#F472B6",done:"#DB2777",fg:"#FFFFFF"},
+  {name:"紫",   bg:"#A78BFA",done:"#7C3AED",fg:"#FFFFFF"},
+  {name:"水",   bg:"#22D3EE",done:"#0891B2",fg:"#083344"},
+  {name:"橙",   bg:"#FB923C",done:"#EA580C",fg:"#FFFFFF"},
+  {name:"赤",   bg:"#F87171",done:"#DC2626",fg:"#FFFFFF"},
+];
+// 全角カタカナ→半角カナ変換
+const KANA_MAP={"ガ":"ｶﾞ","ギ":"ｷﾞ","グ":"ｸﾞ","ゲ":"ｹﾞ","ゴ":"ｺﾞ","ザ":"ｻﾞ","ジ":"ｼﾞ","ズ":"ｽﾞ","ゼ":"ｾﾞ","ゾ":"ｿﾞ","ダ":"ﾀﾞ","ヂ":"ﾁﾞ","ヅ":"ﾂﾞ","デ":"ﾃﾞ","ド":"ﾄﾞ","バ":"ﾊﾞ","ビ":"ﾋﾞ","ブ":"ﾌﾞ","ベ":"ﾍﾞ","ボ":"ﾎﾞ","パ":"ﾊﾟ","ピ":"ﾋﾟ","プ":"ﾌﾟ","ペ":"ﾍﾟ","ポ":"ﾎﾟ","ヴ":"ｳﾞ","ア":"ｱ","イ":"ｲ","ウ":"ｳ","エ":"ｴ","オ":"ｵ","カ":"ｶ","キ":"ｷ","ク":"ｸ","ケ":"ｹ","コ":"ｺ","サ":"ｻ","シ":"ｼ","ス":"ｽ","セ":"ｾ","ソ":"ｿ","タ":"ﾀ","チ":"ﾁ","ツ":"ﾂ","テ":"ﾃ","ト":"ﾄ","ナ":"ﾅ","ニ":"ﾆ","ヌ":"ﾇ","ネ":"ﾈ","ノ":"ﾉ","ハ":"ﾊ","ヒ":"ﾋ","フ":"ﾌ","ヘ":"ﾍ","ホ":"ﾎ","マ":"ﾏ","ミ":"ﾐ","ム":"ﾑ","メ":"ﾒ","モ":"ﾓ","ヤ":"ﾔ","ユ":"ﾕ","ヨ":"ﾖ","ラ":"ﾗ","リ":"ﾘ","ル":"ﾙ","レ":"ﾚ","ロ":"ﾛ","ワ":"ﾜ","ヲ":"ｦ","ン":"ﾝ","ァ":"ｧ","ィ":"ｨ","ゥ":"ｩ","ェ":"ｪ","ォ":"ｫ","ャ":"ｬ","ュ":"ｭ","ョ":"ｮ","ッ":"ｯ","ー":"ｰ","、":"､","。":"｡","・":"･","「":"｢","」":"｣","　":" "};
+function toHankakuKana(str){ return String(str==null?"":str).replace(/[ァ-ヶ　、-〜「」・ー]/g, c=>KANA_MAP[c]||c); }
 
 const TODAY=new Date(); TODAY.setHours(0,0,0,0);
 function todayKey(){ return iso(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()); }
-// 月表示（6週固定グリッド）の既定開始日：TODAYの前週の日曜（→TODAYが2段目に来る）
-function defaultMonthGridStart(){
-  const d=new Date(TODAY); d.setDate(d.getDate()-d.getDay()); // 今週の日曜
-  d.setDate(d.getDate()-7);                                   // 前週の日曜
-  return d;
-}
 
 // 日本の祝日・振替休日（国立天文台 暦要項 2025-2027 確定値。2028年以降は公式未確定のため非搭載）
 const HOLIDAYS={
@@ -146,40 +167,55 @@ const HOLIDAYS={
 function holidayName(key){ return HOLIDAYS[key]||null; }
 
 function newSite(id,name,room,category){return {id,name,room,category:category||"三井",plan:[null,null,null,null,null,null],act:[null,null,null,null,null,null],works:{},open:false,
-  mtgTime:null,                        // 退去立会の時刻（hh:mm）
+  mtgTime:null,                        // 退去立会の開始時刻（hh:mm）
+  mtgEndTime:null,                     // 退去立会の終了時刻（hh:mm、幅がある場合のみ）
+  attendee:null,                       // 立会者（鵜飼/野間元/秀島/西谷/森/現調）
   moveinClean:{order:null,done:null},  // 入居前清掃（発注/実施）
   keyChange:{order:null,done:null},    // 鍵交換（発注/実施）
   billTo:"デザイン",     // 請求先（デザイン/ウエル/レジデンシャル）
   furniture:"なし",      // 家具有無（あり/なし）
   autolock:"",           // オートロック（呼5100 / ※1234呼 / フリー入力）
-  note:"" };}            // 備考（当社/オープン/電気メーター/水道メーター/南京5100 / フリー入力）
+  note:"",             // 備考（当社/オープン/電気メーター/水道メーター/南京5100 / フリー入力）
+  memo:"" };}          // 進捗表右端のフリーメモ
 const BILL_OPTS=["デザイン","ウエル","レジデンシャル"];
 const FURN_OPTS=["なし","あり"];
 const AUTOLOCK_PRESETS=["呼5100","※1234呼"];   // 加えてフリー入力（空欄デフォルト）
 const NOTE_PRESETS=["当社","オープン","電気メーター","水道メーター","南京5100"]; // 加えてフリー入力（空欄デフォルト）
+// ZERO（クリーニング業者）の休業日。日付キー("YYYY-MM-DD")のSet。現場名/ZERO/アルファ&ZERO 絞り込み時にカレンダー表示。
+let zeroHolidays=new Set();
 let sites=[
   Object.assign(newSite(1,"パークアクシスうつぼ公園","803","三井"),{plan:["2026-08-05","2026-08-07","2026-08-10","2026-08-12","2026-08-20","2026-08-28"],act:["2026-08-01","2026-08-03","2026-08-05",null,null,null],
     mtgTime:"10:00",billTo:"デザイン",furniture:"なし",autolock:"呼5100",note:"当社",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-15",done:"2026-08-17"},
-    works:{"リフォーム":{start:"2026-08-06",end:"2026-08-08",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-10",act:null,vendor:"ZERO",cleanFee:38000,acFee:12000,peelFee:0},"設備交換":{items:[{name:"浴室乾燥機",plan:null,act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-12",act:null,vendor:"シャムス"},"設備廃棄":{plan:"2026-08-06",act:null,vendor:"ガリバー"}}}),
+    works:{"リフォーム":{start:"2026-08-06",end:"2026-08-08",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-10",act:null,vendor:"ZERO",cleanFee:38000,acFee:12000,peelFee:0},"設備交換":{items:[{name:"浴室乾燥機",plan:null,act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-12",act:null,vendor:"ｼｬﾑｽ"},"設備廃棄":{plan:"2026-08-06",act:null,vendor:"ｶﾞﾘﾊﾞｰ"}}}),
   Object.assign(newSite(2,"パークキューブ北浜","1205","三井"),{plan:["2026-08-06","2026-08-08","2026-08-11","2026-08-25","2026-08-24","2026-08-31"],act:["2026-08-15","2026-08-18","2026-08-19",null,null,null],
     mtgTime:"13:30",billTo:"ウエル",furniture:"あり",autolock:"※1234呼",note:"オープン",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-19",done:"2026-08-27"},
-    works:{"リフォーム":{start:"2026-08-20",end:"2026-08-22",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-24",act:null,vendor:"ZERO",cleanFee:45000,acFee:24000,peelFee:15000},"設備交換":{items:[{name:"給湯器交換",plan:"2026-08-20",act:null,vendor:"大松"},{name:"レンジフード交換",plan:"2026-08-21",act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-25",act:null,vendor:"シャムス"},"畳・ふすま":{plan:"2026-08-21",act:null,vendor:"森上"}}}),
+    works:{"リフォーム":{start:"2026-08-20",end:"2026-08-22",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-24",act:null,vendor:"ZERO",cleanFee:45000,acFee:24000,peelFee:15000},"設備交換":{items:[{name:"給湯器交換",plan:"2026-08-20",act:null,vendor:"大松"},{name:"レンジフード交換",plan:"2026-08-21",act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-25",act:null,vendor:"ｼｬﾑｽ"},"畳・ふすま":{plan:"2026-08-21",act:null,vendor:"森上"}}}),
   Object.assign(newSite(3,"西天満レジデンス","305","三井"),{plan:["2026-08-04","2026-08-06","2026-08-08","2026-08-19","2026-08-26","2026-08-31"],act:["2026-08-08","2026-08-10","2026-08-12",null,null,null],
     mtgTime:"09:00",billTo:"レジデンシャル",furniture:"なし",autolock:"",note:"",moveinClean:{order:"2026-08-24",done:"2026-08-28"},keyChange:{order:"2026-08-24",done:null},
-    works:{"リフォーム":{start:"2026-08-13",end:"2026-08-17",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-18",act:null,vendor:"ZERO",cleanFee:40000,acFee:12000,peelFee:0},"リペア":{plan:"2026-08-19",act:null,vendor:"シャムス"},"畳・ふすま":{plan:"2026-08-13",act:null,vendor:"森上"},"設備廃棄":{plan:"2026-08-14",act:null,vendor:"ガリバー"}}}),
+    works:{"リフォーム":{start:"2026-08-13",end:"2026-08-17",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-18",act:null,vendor:"ZERO",cleanFee:40000,acFee:12000,peelFee:0},"リペア":{plan:"2026-08-19",act:null,vendor:"ｼｬﾑｽ"},"畳・ふすま":{plan:"2026-08-13",act:null,vendor:"森上"},"設備廃棄":{plan:"2026-08-14",act:null,vendor:"ｶﾞﾘﾊﾞｰ"}}}),
   Object.assign(newSite(4,"ﾌｧｰｽﾄｽﾃｰｼﾞ江坂広芝町Ⅱ","301","自社"),{plan:[null,null,null,"2026-08-28",null,null],act:["2026-08-23",null,null,null,null,null],
     mtgTime:"16:00",billTo:"デザイン",furniture:"なし",autolock:"",note:"",moveinClean:{order:null,done:null},keyChange:{order:null,done:null},
-    works:{"リフォーム":{start:"2026-08-25",end:"2026-08-27",act:null,vendor:"アルファ"},"クリーニング":{plan:"2026-08-28",act:null,vendor:"ZERO"}}}),
+    works:{"リフォーム":{start:"2026-08-25",end:"2026-08-27",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-28",act:null,vendor:"ZERO"}}}),
 ];
 let nextId=5;
 let calAnchor=new Date(TODAY);
 let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
-let sortKey="phase"; // phase | name | date1
+let sortKey="created"; // created(登録順) | phase | name | date1
 // 列フィルター状態。null＝無効。
 // name/status/vendorはSet、phaseRange[i]は各工程i(0-5)の日付範囲{from,to}、moveinRange/keyRangeは入居前清掃/鍵交換の実施日範囲
 let colFilters={ name:null, status:null, vendor:null, category:null,
   phaseRange:[null,null,null,null,null,null], moveinRange:null, keyRange:null };
 
+// 要件5：登録済み現場名・物件マスタのカタカナを半角カナへ一括変換
+const VENDOR_RENAME={"アルファ":"ｱﾙﾌｧ","シャムス":"ｼｬﾑｽ","ガリバー":"ｶﾞﾘﾊﾞｰ"};
+function renameVendor(v){ return v&&VENDOR_RENAME[v]?VENDOR_RENAME[v]:v; }
+function hankakuizeAll(){
+  sites.forEach(s=>{ if(s.name) s.name=toHankakuKana(s.name);
+    Object.values(s.works||{}).forEach(wk=>{ if(wk.items){ wk.items.forEach(it=>{ it.vendor=renameVendor(it.vendor); }); } else if(wk.vendor!==undefined){ wk.vendor=renameVendor(wk.vendor); } });
+  });
+  buildingMaster=buildingMaster.map(b=>toHankakuKana(b));
+  vendorMaster=[...new Set(vendorMaster.map(renameVendor))];
+}
 function currentPhase(s){let d=0;for(let i=0;i<NPHASE;i++){if(s.act[i])d=i+1;}return d;}
 // 区分ごとに使う工程インデックス（自社は①④⑤=0,3,4のみ）
 function activePhases(s){ return s.category==="自社" ? [0,3,4] : [0,1,2,3,4,5]; }
@@ -191,6 +227,8 @@ function isComplete(s){
   if(s.category==="自社") return !!s.act[4];
   return currentPhase(s)>=NPHASE && !!(s.keyChange && s.keyChange.done);
 }
+// 立会時刻の表示（開始のみ or 開始〜終了）
+function mtgTimeLabel(s){ if(!s.mtgTime) return ''; return s.mtgEndTime ? `${s.mtgTime}〜${s.mtgEndTime}` : s.mtgTime; }
 function fmt(d){if(!d)return null;const p=d.split("-");return `${parseInt(p[1])}/${parseInt(p[2])}`;}
 function iso(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;}
 function parseISO(key){const p=key.split("-");return new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));}
@@ -286,11 +324,11 @@ function openColFilter(key,anchorEl){
 function renderHead(){
   const extraTh=[["⑦","入居前清掃","movein"],["⑧","鍵交換","key"]].map(([num,n,fk])=>`<th style="padding:8px 4px; text-align:center; min-width:84px; font-weight:400; font-size:13px; border-left:0.5px solid var(--border);">${num}${filterIcon(fk)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${n}</div></th>`).join("");
   document.getElementById("thead").innerHTML=`<tr style="background:var(--surface-1); color:var(--text-secondary);">
-    <th style="padding:9px 6px; text-align:center; position:sticky; left:0; background:var(--surface-1); min-width:56px; border-right:0.5px solid var(--border); font-size:13px;">区分${filterIcon("category")}</th>
-    <th style="padding:9px 10px; text-align:left; min-width:186px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
+    <th style="padding:9px 10px; text-align:left; position:sticky; left:0; z-index:2; background:var(--surface-1); min-width:170px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
+    <th style="padding:9px 6px; text-align:center; min-width:56px; border-right:0.5px solid var(--border); font-size:13px;">区分${filterIcon("category")}</th>
     <th style="padding:9px 6px; text-align:left; min-width:92px; border-right:0.5px solid var(--border); font-size:13px;">現在地${filterIcon("status")}</th>
     ${PHASES.map((p,idx)=>{const nm=p.slice(1).replace("・工程管理","<br>・工程管理").replace("・請求書発行","<br>・請求書発行"); return `<th style="padding:8px 4px; text-align:center; min-width:72px; font-weight:400; font-size:13px;">${p.slice(0,1)}${filterIcon("phase"+idx)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${nm}</div></th>`;}).join("")}
-    ${extraTh}</tr>`;
+    ${extraTh}<th style="padding:9px 10px; text-align:left; min-width:140px; border-left:0.5px solid var(--border); font-size:13px;">メモ</th></tr>`;
   document.querySelectorAll("[data-colfilter]").forEach(el=>el.addEventListener("click",(e)=>{ e.stopPropagation(); openColFilter(el.dataset.colfilter, el); }));
 }
 // 入居前清掃・鍵交換セル（発注/実施の2段、横に日付）
@@ -310,13 +348,15 @@ function cellHtml(s,i){
     return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border);">
       <div title="工事の最終日を自動反映" style="font-size:13px;">${plan?`<span style="color:var(--text-secondary);">${plan}</span>`:'<span style="color:var(--text-muted);">自動</span>'}<i class="ti ti-refresh" aria-hidden="true" style="font-size:10px; vertical-align:0; margin-left:2px; color:var(--text-muted);"></i></div></td>`;
   }
-  // ①(i=0) 退去立会：日付＋時刻(hh:mm)。日付未入力は「未定」
+  // ①(i=0) 退去立会：日付＋時刻(hh:mm、幅可)＋立会者。日付未入力は「未定」
   if(i===0){
     const bg0 = act ? 'background:var(--bg-success);' : '';
-    const timeStr = s.mtgTime || '';
+    const timeStr = mtgTimeLabel(s);
+    const att = s.attendee || '';
     return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); ${bg0}">
       <div data-edit="${s.id}:0:act" style="cursor:pointer; font-size:13px;">${act?`<span style="color:var(--text-success); font-weight:500;">${act}</span>`:'<span style="color:var(--text-muted);">未定</span>'}</div>
-      <div data-mtgtime="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${timeStr?`<span style="color:var(--text-secondary);"><i class="ti ti-clock" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${timeStr}</span>`:'<span style="color:var(--text-muted);">時刻</span>'}</div></td>`;
+      <div data-mtgtime="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${timeStr?`<span style="color:var(--text-secondary);"><i class="ti ti-clock" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${timeStr}</span>`:'<span style="color:var(--text-muted);">時刻</span>'}</div>
+      <div data-attendee="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${att?`<span style="color:var(--text-secondary);"><i class="ti ti-user" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${att}</span>`:'<span style="color:var(--text-muted);">立会者</span>'}</div></td>`;
   }
   // ⑤(i=4) 完了チェック：単日。工事最終日より前なら警告背景
   let bg = filled?'background:var(--bg-success);':'';
@@ -393,12 +433,13 @@ function renderBody(){
   // 並べ替え（切替式）
   if(sortKey==="name") rows.sort((a,b)=>(a.name+a.room).localeCompare(b.name+b.room,"ja"));
   else if(sortKey==="date1") rows.sort((a,b)=>(a.act[0]||a.plan[0]||"9999").localeCompare(b.act[0]||b.plan[0]||"9999"));
-  else rows.sort((a,b)=>currentPhase(a)-currentPhase(b)); // phase（既定）
+  else if(sortKey==="phase") rows.sort((a,b)=>currentPhase(a)-currentPhase(b));
+  else rows.sort((a,b)=>a.id-b.id); // created（既定＝登録順）
   // ソートボタンのアクティブ表示
   document.querySelectorAll(".sortbtn").forEach(b=>{ const on=b.dataset.sort===sortKey;
     b.style.background=on?"var(--text-accent)":"var(--surface-2)"; b.style.color=on?"#fff":"var(--text-primary)"; b.style.fontWeight=on?"600":"400"; });
   const tb=document.getElementById("tbody");
-  if(rows.length===0){tb.innerHTML=`<tr><td colspan="13" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; renderDetail(sites.find(s=>s.open)||null); updateFilterClearBtn(); return;}
+  if(rows.length===0){tb.innerHTML=`<tr><td colspan="14" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; renderDetail(sites.find(s=>s.open)||null); updateFilterClearBtn(); return;}
   tb.innerHTML=rows.map(s=>{
     const cp=currentPhase(s);
     const sl=statusLabel(s);
@@ -410,27 +451,33 @@ function renderBody(){
     const missBadge = missing ? `<span title="業者未設定の工事があります" style="font-size:10px; padding:1px 7px; border-radius:var(--radius); background:var(--bg-warning); color:var(--text-warning); margin-left:6px;"><i class="ti ti-user-exclamation" aria-hidden="true" style="font-size:11px; vertical-align:-1px;"></i> 業者未設定</span>` : "";
     const catColor = s.category==="自社" ? {bg:"#e0e7ff",fg:"#3730a3"} : {bg:"#fef3c7",fg:"#92400e"};
     return `<tr style="border-top:0.5px solid var(--border); ${s.open?'background:var(--bg-accent-muted);':''}">
-      <td style="padding:8px 6px; text-align:center; position:sticky; left:0; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
-        <span style="display:inline-block; font-size:11px; font-weight:600; padding:2px 7px; border-radius:var(--radius); background:${catColor.bg}; color:${catColor.fg};">${s.category}</span></td>
-      <td style="padding:8px 10px; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
+      <td style="padding:8px 10px; position:sticky; left:0; z-index:1; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
         <div style="display:flex; align-items:flex-start; gap:6px;">
           <div data-toggle="${s.id}" style="cursor:pointer; flex:1;">
             <div style="font-weight:500;"><i class="ti ti-chevron-${s.open?'down':'right'}" aria-hidden="true" style="font-size:13px; vertical-align:-1px;"></i> ${s.name}</div>
-            <div style="font-size:11px; color:var(--text-secondary); padding-left:16px;">${s.room}号室${wn?` · ④内訳${wn}件`:""}${missBadge}</div>
+            <div style="font-size:11px; color:var(--text-secondary); padding-left:16px;"><span style="font-weight:700; color:var(--text-primary);">${s.room}号室</span>${wn?` · ④内訳${wn}件`:""}${missBadge}</div>
           </div>
-          <button data-siteedit="${s.id}" title="現場名・区分を編集" style="flex:none; font-size:11px; padding:2px 7px; color:var(--text-secondary); border-color:var(--border);"><i class="ti ti-pencil" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
-          <button data-sitedel="${s.id}" title="この現場を削除" style="flex:none; font-size:11px; padding:2px 7px; color:var(--text-danger); border-color:var(--border);"><i class="ti ti-trash" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
+          <div style="display:flex; flex-direction:column; gap:3px; flex:none;">
+          <button data-siteedit="${s.id}" title="現場名・区分を編集" style="font-size:11px; padding:2px 7px; color:var(--text-secondary); border-color:var(--border);"><i class="ti ti-pencil" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
+          <button data-sitedel="${s.id}" title="この現場を削除" style="font-size:11px; padding:2px 7px; color:var(--text-danger); border-color:var(--border);"><i class="ti ti-trash" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
+          </div>
         </div></td>
+      <td style="padding:8px 6px; text-align:center; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
+        <span style="display:inline-block; font-size:11px; font-weight:600; padding:2px 7px; border-radius:var(--radius); background:${catColor.bg}; color:${catColor.fg};">${s.category}</span></td>
       <td style="padding:8px 8px; border-right:0.5px solid var(--border);">${status}</td>
-      ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}</tr>`;
+      ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}<td style="padding:5px 6px; border-left:0.5px solid var(--border); vertical-align:top;"><textarea data-memo="${s.id}" rows="2" placeholder="メモ" style="width:130px; box-sizing:border-box; font-size:12px; padding:3px 5px; resize:vertical; min-height:32px;">${(s.memo||"").replace(/</g,"&lt;")}</textarea></td></tr>`
+    + (s.open ? `<tr class="detailrow"><td colspan="14" style="padding:0 10px 12px; background:var(--bg-accent-muted); position:sticky; left:0;"><div id="detailinline_${s.id}"></div></td></tr>` : "");
   }).join("");
   tb.querySelectorAll("[data-toggle]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.toggle)); if(s){const was=s.open; sites.forEach(x=>x.open=false); s.open=!was; refresh();}}));
   tb.querySelectorAll("[data-siteedit]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); openEditSiteModal(Number(el.dataset.siteedit));}));
   tb.querySelectorAll("[data-sitedel]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); const id=Number(el.dataset.sitedel); const s=sites.find(x=>x.id===id); if(!s)return; if(confirm(`「${s.name} ${s.room}号室」を削除します。工事内訳や金額など、この現場の全データが消えます。よろしいですか？`)){ sites=sites.filter(x=>x.id!==id); refresh(); }}));
   tb.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>{const [id,idx,kind]=el.dataset.edit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return; const i=Number(idx);
-    if(i===0){ openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{s.act[0]=dv; s.mtgTime=tv; refresh();}); return; }
+    if(i===0){ openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh();},s.mtgEndTime,s.attendee); return; }
     openDateInline(el,s[kind][i],(v)=>{s[kind][i]=v; refresh();});}));
-  tb.querySelectorAll("[data-mtgtime]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.mtgtime)); if(!s)return; openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{s.act[0]=dv; s.mtgTime=tv; refresh();});}));
+  const openMtg=(s,el)=>openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh();},s.mtgEndTime,s.attendee);
+  tb.querySelectorAll("[data-mtgtime]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.mtgtime)); if(s)openMtg(s,el);}));
+  tb.querySelectorAll("[data-attendee]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.attendee)); if(s)openMtg(s,el);}));
+  tb.querySelectorAll("textarea[data-memo]").forEach(el=>el.addEventListener("input",()=>{const s=sites.find(x=>x.id===Number(el.dataset.memo)); if(s){s.memo=el.value; dirty=true; scheduleAutoSave();}}));
   tb.querySelectorAll("[data-xedit]").forEach(el=>el.addEventListener("click",()=>{const [id,field,k]=el.dataset.xedit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return;
     // 鍵交換の実施日は④予定日(plan[3])より後のみ許可
     let opts={};
@@ -442,7 +489,9 @@ function renderBody(){
       s[field][k]=v; refresh();
     }, opts);
   }));
-  renderDetail(sites.find(s=>s.open)||null);
+  const openS=sites.find(s=>s.open)||null;
+  document.getElementById("detail").innerHTML="";
+  if(openS) renderDetailInto(openS, document.getElementById("detailinline_"+openS.id));
   updateFilterClearBtn();
 }
 // フィルターが有効なとき「フィルター解除」ボタンを表示
@@ -480,8 +529,9 @@ function presetOrFreeHtml(kind,cur,presets){
   return `<span style="display:inline-flex; gap:4px; align-items:center;">${sel}${free}</span>`;
 }
 
-function renderDetail(s){
-  const d=document.getElementById("detail");
+function renderDetail(s){ renderDetailInto(s, document.getElementById("detail")); }
+function renderDetailInto(s, d){
+  if(!d) return;
   if(!s){d.innerHTML=""; return;}
   let rows="";
   const dot=(w)=>{const col=WORKCOLOR[w]; return `<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${col.bg}; border:1px solid ${col.fg}; margin-right:5px; vertical-align:0;"></span>`;};
@@ -581,11 +631,30 @@ function daysInPeriod(){
     else { const d=new Date(calAnchor); const dow=d.getDay(); start=new Date(d); start.setDate(d.getDate()-dow); }
     return Array.from({length:7},(_,i)=>{const x=new Date(start); x.setDate(start.getDate()+i); return x;});
   }
-  // 月表示は6週固定グリッド：calAnchor（日曜）から42日
-  const start=new Date(calAnchor); start.setDate(start.getDate()-start.getDay());
-  return Array.from({length:42},(_,i)=>{const x=new Date(start); x.setDate(start.getDate()+i); return x;});
+  // 月表示：常時6週（42日）。グリッド先頭はcalAnchorを含む週の日曜。
+  const gs=monthGridStart();
+  return Array.from({length:42},(_,i)=>{const x=new Date(gs); x.setDate(gs.getDate()+i); return x;});
 }
+// 月表示グリッドの先頭日（calAnchorを含む週の日曜）
+function monthGridStart(){ const d=new Date(calAnchor); const dow=d.getDay(); const s=new Date(d); s.setDate(d.getDate()-dow); s.setHours(0,0,0,0); return s; }
+// 既定アンカー：今日の1週間前（→今日を含む週が6週グリッドの2段目になる）
+function calDefaultAnchor(){ const d=new Date(TODAY); d.setDate(d.getDate()-7); return d; }
 function sitematch(s){ return calSite==="all"||s.id===Number(calSite); }
+// カレンダーの業者フィルタ判定（all / アルファ&ZERO複合 / 単一業者）
+function vendorMatch(v){ if(calVendor==="all") return true; if(calVendor===VENDOR_AZ) return AZ_VENDORS.includes(v); return v===calVendor; }
+// 業者フィルタが「特定業者に絞られている」か（all以外＝立会/清掃/鍵の非業者チップは出さない、の判定に使用）
+function vendorFiltered(){ return calVendor!=="all"; }
+// 単一業者に絞り込み中か（要件6：色変更UIを出す条件。アルファ&ZEROは対象外）
+function singleVendorFilter(){ return calVendor!=="all" && calVendor!==VENDOR_AZ; }
+// ZERO休みをカレンダー表示すべきか（現場名 / ZERO / アルファ&ZERO 絞り込み時）
+function showZeroHolidays(){ return calSite!=="all" || calVendor==="ZERO" || calVendor===VENDOR_AZ; }
+// 要件6：クリック対象の予定に付いたカスタム色を、単一業者絞り込み時のみ適用。無ければ工事色（ZEROクリーニングは請求先色）
+function effColor(work,site,customColor){
+  if(singleVendorFilter() && customColor) return customColor;
+  // 要件1②：ZEROのみ絞り込み時、クリーニングは請求先で色分け
+  if(calVendor==="ZERO" && work==="クリーニング"){ return ZERO_BILL_COLOR[site.billTo]||WORKCOLOR["クリーニング"]; }
+  return WORKCOLOR[work];
+}
 // 現在のカレンダー表示期間内に、表示対象の予定が1件以上ある現場（完了分含む）を返す。
 // 工事フィルタ・業者フィルタは考慮するが、現場フィルタ自体は無視（選択肢生成用）。
 function sitesInView(){
@@ -593,7 +662,6 @@ function sitesInView(){
   const first=iso(days[0].getFullYear(),days[0].getMonth(),days[0].getDate());
   const last=iso(days[days.length-1].getFullYear(),days[days.length-1].getMonth(),days[days.length-1].getDate());
   const inRange=(a,b)=>{ if(!a)return false; const bb=b||a; return a<=last && bb>=first; };
-  const vAll = calVendor==="all";
   const wantWork=(w)=> calWork==="all"||calWork===w;
   const wantMtg = calWork==="all"||calWork===EXTRA_MTG.key;
   const wantMovein = calWork==="all"||calWork===EXTRA_MOVEIN.key;
@@ -603,12 +671,12 @@ function sitesInView(){
     let hit=false;
     // 工事
     Object.keys(s.works).forEach(w=>{ if(hit||!wantWork(w))return; const t=WORKDEF[w].type, wk=s.works[w];
-      if(t==="span"){ if((vAll||wk.vendor===calVendor)&&inRange(wk.start,wk.end)) hit=true; }
-      else if(t==="single"){ if((vAll||wk.vendor===calVendor)&&inRange(wk.plan,null)) hit=true; }
-      else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if((vAll||it.vendor===calVendor)&&inRange(it.plan,null)) hit=true; }); }
+      if(t==="span"){ if(vendorMatch(wk.vendor)&&inRange(wk.start,wk.end)) hit=true; }
+      else if(t==="single"){ if(vendorMatch(wk.vendor)&&inRange(wk.plan,null)) hit=true; }
+      else if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(vendorMatch(it.vendor)&&inRange(it.plan,null)) hit=true; }); }
     });
     // 立会・入居前清掃・鍵交換（業者フィルタ時は対象外）
-    if(!hit && vAll){
+    if(!hit && !vendorFiltered()){
       if(wantMtg && inRange(s.act[0],null)) hit=true;
       else if(wantMovein && inRange(s.moveinClean.done,null)) hit=true;
       else if(wantKey && inRange(s.keyChange.done,null)) hit=true;
@@ -618,17 +686,17 @@ function sitesInView(){
   return out;
 }
 function collectSpans(){
-  const vmatch=(v)=> calVendor==="all"||v===calVendor, wmatch=(w)=> calWork==="all"||w===calWork;
+  const wmatch=(w)=> calWork==="all"||w===calWork;
   let e=[];
-  sites.forEach(s=>{ if(!sitematch(s))return; Object.keys(s.works).forEach(w=>{ if(!wmatch(w))return; if(WORKDEF[w].type!=="span")return; const wk=s.works[w]; if(wk.start&&wk.end&&vmatch(wk.vendor)) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act});});});
+  sites.forEach(s=>{ if(!sitematch(s))return; Object.keys(s.works).forEach(w=>{ if(!wmatch(w))return; if(WORKDEF[w].type!=="span")return; const wk=s.works[w]; if(wk.start&&wk.end&&vendorMatch(wk.vendor)) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act,color:wk.calColor||null,ref:{kind:"span",id:s.id,w}});});});
   return e;
 }
 function singlesOnDay(key){
-  const vmatch=(v)=> calVendor==="all"||v===calVendor, wmatch=(w)=> calWork==="all"||w===calWork;
+  const wmatch=(w)=> calWork==="all"||w===calWork;
   let out=[];
   sites.forEach(s=>{ if(!sitematch(s))return; Object.keys(s.works).forEach(w=>{ if(!wmatch(w))return; const t=WORKDEF[w].type, wk=s.works[w];
-    if(t==="multi"){ (wk.items||[]).forEach((it,ix)=>{ if(it.plan===key&&vmatch(it.vendor)) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act,ref:{kind:"multi",id:s.id,w,ix}}); }); }
-    else if(t==="single"){ if(wk.plan===key&&vmatch(wk.vendor)) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act,ref:{kind:"single",id:s.id,w}}); }
+    if(t==="multi"){ (wk.items||[]).forEach((it,ix)=>{ if(it.plan===key&&vendorMatch(it.vendor)) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act,color:it.calColor||null,ref:{kind:"multi",id:s.id,w,ix}}); }); }
+    else if(t==="single"){ if(wk.plan===key&&vendorMatch(wk.vendor)) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act,color:wk.calColor||null,ref:{kind:"single",id:s.id,w}}); }
   });});
   return out;
 }
@@ -637,17 +705,17 @@ function extraChipsOnDay(key){
   let out=[];
   const wantAll = calWork==="all";
   sites.forEach(s=>{ if(!sitematch(s))return;
-    if((wantAll||calWork===EXTRA_MTG.key) && s.act[0]===key) out.push({kind:"mtg",site:s,color:EXTRA_MTG.color,abbr:EXTRA_MTG.abbr,time:s.mtgTime});
+    if((wantAll||calWork===EXTRA_MTG.key) && s.act[0]===key) out.push({kind:"mtg",site:s,color:EXTRA_MTG.color,abbr:EXTRA_MTG.abbr,time:mtgTimeLabel(s)});
     if((wantAll||calWork===EXTRA_MOVEIN.key) && s.moveinClean.done===key) out.push({kind:"movein",site:s,color:EXTRA_MOVEIN.color,abbr:EXTRA_MOVEIN.abbr});
     if((wantAll||calWork===EXTRA_KEY.key) && s.keyChange.done===key) out.push({kind:"key",site:s,color:EXTRA_KEY.color,abbr:EXTRA_KEY.abbr});
   });
   // 1現場に絞ったとき（かつ工事フィルタ=すべて）は、②③⑤⑥の工程日も工程名付きで表示（実績優先、なければ予定）
-  if(calSite!=="all" && calVendor==="all" && wantAll){
+  if(calSite!=="all" && !vendorFiltered() && wantAll){
     const s=sites.find(x=>String(x.id)===String(calSite));
     if(s){ [1,2,4,5].forEach(i=>{ if(!isPhaseActive(s,i))return; const dt=s.act[i]||s.plan[i]; if(dt===key){ out.push({kind:"phase",site:s,phaseIdx:i,color:PHASE_MILESTONE_COLOR,abbr:PHASES[i].slice(1)}); } }); }
   }
   // 業者フィルタが特定業者のときは工事に業者が無いこれらは出さない
-  if(calVendor!=="all") return [];
+  if(vendorFiltered()) return [];
   return out;
 }
 function extraChipLabel(e){ const t=e.time?` ${e.time}`:''; return calSite!=="all" ? `[${e.abbr}]${t}` : `[${e.abbr}]${siteLabel(e.site)}${t}`; }
@@ -666,7 +734,13 @@ function renderLegend(){
                     : w===EXTRA_KEY.key    ? {bg:EXTRA_KEY.color.done,fg:EXTRA_KEY.color.fg}
                     : WORKCOLOR[w];
   const shown = calWork==="all" ? WORKS : [calWork];
-  lg.innerHTML=shown.map(w=>{const c=colorOf(w); if(!c) return ""; return `<span style="font-size:11px; display:inline-flex; align-items:center; gap:4px;"><span style="width:12px; height:12px; border-radius:3px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("");
+  let html=shown.map(w=>{const c=colorOf(w); if(!c) return ""; return `<span style="font-size:11px; display:inline-flex; align-items:center; gap:4px;"><span style="width:12px; height:12px; border-radius:3px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("");
+  // 要件1②：ZEROのみ絞り込み時、クリーニングは請求先で色分け
+  if(calVendor==="ZERO" && (calWork==="all"||calWork==="クリーニング")){
+    html+=`<span style="font-size:11px; color:var(--text-muted); margin-left:6px;">清掃色＝請求先：</span>`+
+      Object.keys(ZERO_BILL_COLOR).map(b=>{const c=ZERO_BILL_COLOR[b]; return `<span style="font-size:11px; display:inline-flex; align-items:center; gap:4px;"><span style="width:12px; height:12px; border-radius:3px; background:${c.done}; border:1px solid ${c.fg};"></span>${b}</span>`;}).join("");
+  }
+  lg.innerHTML=html;
 }
 
 function dayKeyAtPoint(x,y){
@@ -676,10 +750,22 @@ function dayKeyAtPoint(x,y){
 }
 
 let DND=null;
-function isPhone(){ return window.matchMedia && window.matchMedia("(max-width:640px)").matches; }
+function isPhone(){
+  // タッチ主体の端末（スマホ/タブレット）はカレンダー内ドラッグ無効・タップのみ。
+  // 幅ではなく入力方式で判定するため、横向きや画面拡大でも判定が外れない。
+  const coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
+  const narrow = window.matchMedia && window.matchMedia("(max-width:640px)").matches;
+  return coarse || narrow;
+}
+// スマホ縦（狭幅）：カレンダーはセル内で折り返す簡易描画にする
+function isPhonePortrait(){
+  const coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
+  const narrow = window.matchMedia && window.matchMedia("(max-width:640px)").matches;
+  return (coarse && narrow) || narrow;
+}
 function startDrag(el, e, payload){
   // スマホ幅かつカレンダー内のチップは、ドラッグ無効・タップのみ（スクロール誤爆防止）
-  const inCalendar = el.closest && el.closest("#tab-calendar") && el.closest(".daycell");
+  const inCalendar = el.closest && (el.closest(".daycell") || el.closest("#calgrid"));
   if(isPhone() && inCalendar){
     let sx=e.clientX, sy=e.clientY, moved=false;
     const mv=(ev)=>{ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>8) moved=true; };
@@ -756,8 +842,10 @@ function renderCalendar(){
   if(!sel.dataset.init){sel.innerHTML=`<option value="all">すべての工事</option>`+WORKS.map(w=>`<option value="${w}"${w===calWork?' selected':''}>${w}</option>`).join("")+`<option value="${EXTRA_MTG.key}"${calWork===EXTRA_MTG.key?' selected':''}>${EXTRA_MTG.key}</option><option value="${EXTRA_MOVEIN.key}"${calWork===EXTRA_MOVEIN.key?' selected':''}>${EXTRA_MOVEIN.key}</option><option value="${EXTRA_KEY.key}"${calWork===EXTRA_KEY.key?' selected':''}>${EXTRA_KEY.key}</option>`; sel.dataset.init="1";}
   const vsel=document.getElementById("vendorsel");
   const vlist=allVendorsInUse();
-  if(calVendor!=="all"&&!vlist.includes(calVendor)) calVendor="all";
-  vsel.innerHTML=`<option value="all">全業者</option>`+vlist.map(v=>`<option value="${v}"${v===calVendor?' selected':''}>${v}</option>`).join("");
+  if(calVendor!=="all"&&calVendor!==VENDOR_AZ&&!vlist.includes(calVendor)) calVendor="all";
+  const azOpt=`<option value="${VENDOR_AZ}"${calVendor===VENDOR_AZ?' selected':''}>アルファ＆ZERO</option>`;
+  vsel.innerHTML=`<option value="all">全業者</option>`+azOpt+vlist.map(v=>`<option value="${v}"${v===calVendor?' selected':''}>${v}</option>`).join("");
+  const zhb=document.getElementById("zeroholbtn"); if(zhb) zhb.style.display=showZeroHolidays()?"inline-flex":"none";
   renderLegend();
 
   const isExtraFilter = (calWork===EXTRA_MTG.key||calWork===EXTRA_MOVEIN.key||calWork===EXTRA_KEY.key);
@@ -768,28 +856,23 @@ function renderCalendar(){
     : "帯・チップはドラッグで移動、クリックで編集。下の未手配をカレンダーへドラッグで割当。");
 
   const days=daysInPeriod();
-  const y=calAnchor.getFullYear(), m=calAnchor.getMonth();
   if(calView==="week"){ const a=days[0],b=days[6]; document.getElementById("perlabel").textContent=`${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
-  else { const a=days[0],b=days[days.length-1]; document.getElementById("perlabel").textContent=`${a.getFullYear()}/${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
+  else { const a=days[0], b=days[days.length-1]; document.getElementById("perlabel").textContent=`${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
 
   let spans=collectSpans();
   spans.sort((a,b)=>a.start.localeCompare(b.start));
 
+  // レーンモード（帯連結・同一物件を同じ高さ）。
+  // 現場絞り込み時：レーン維持。業者絞り込み時：現場でまとめず各日上から詰める（右下がり解消）。
+  const laneMode = (calSite!=="all");
+  renderCalendarLanes(spans, days, laneMode);
+  return;
+
   const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
-  // 週ごとにslotを詰める（週内で重ならない帯は同じ行に配置し、上詰めする）
-  function assignSlotsForWeek(week){
-    const wk=week.filter(Boolean).map(dt=>keyOf(dt));
-    if(!wk.length) return {map:new Map(),max:0};
-    const wStart=wk[0], wEnd=wk[wk.length-1];
-    const inWeek=spans.filter(e=>e.start<=wEnd&&e.end>=wStart).sort((a,b)=>a.start.localeCompare(b.start)||a.end.localeCompare(b.end));
-    const slotEnds=[]; const map=new Map();
-    inWeek.forEach(e=>{ let sl=0; while(sl<slotEnds.length&&slotEnds[sl]>=e.start)sl++; map.set(e,sl); slotEnds[sl]=e.end; });
-    return {map,max:slotEnds.length};
-  }
   const tKey=todayKey();
   let weeks=[];
   if(calView==="week") weeks=[days];
-  else { const firstDow=days[0].getDay(); let row=new Array(firstDow).fill(null); days.forEach(dt=>{row.push(dt); if(row.length===7){weeks.push(row); row=[];}}); if(row.length){while(row.length<7)row.push(null); weeks.push(row);} }
+  else { for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7)); }
 
   const wd=["日","月","火","水","木","金","土"];
   let headRow;
@@ -801,7 +884,8 @@ function renderCalendar(){
 
   let weeksHtml="";
   weeks.forEach(week=>{
-    const {map:slotMap,max:usedSpanSlots}=assignSlotsForWeek(week);
+    let usedSpanSlots=0;
+    week.forEach(dt=>{ if(!dt)return; const k=keyOf(dt); spans.forEach(e=>{ if(k>=e.start&&k<=e.end) usedSpanSlots=Math.max(usedSpanSlots,e.slot+1); }); });
     const spanAreaH=usedSpanSlots*(ROW+GAP);
     const topPad=26, cellMinH=(calView==="week"?120:74);
 
@@ -811,12 +895,14 @@ function renderCalendar(){
       const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey);
       const hol=holidayName(k);
       const singles=singlesOnDay(k);
-      const chips=singles.map((e,i)=>`<div class="chip" data-chipkey="${k}__${i}" title="${labelText(e)}" style="cursor:grab; touch-action:none; ${`background:${e.done?WORKCOLOR[e.work].done:WORKCOLOR[e.work].bg}; color:${WORKCOLOR[e.work].fg};`} font-size:10px; line-height:1.25; padding:2px 5px; margin-top:2px; border-radius:5px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`).join("");
+      const chips=singles.map((e,i)=>{const c=effColor(e.work,e.site,e.color); return `<div class="chip" data-chipkey="${k}__${i}" title="${labelText(e)}" style="cursor:grab; touch-action:none; background:${e.done?c.done:c.bg}; color:${c.fg}; font-size:10px; line-height:1.25; padding:2px 5px; margin-top:2px; border-radius:5px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`;}).join("");
       const extras=extraChipsOnDay(k);
       const extraChips=extras.map((e,i)=>`<div class="xchip" data-xchipkey="${k}__${i}" title="${extraChipLabel(e)}（実施）" style="cursor:grab; touch-action:none; background:${e.color.done}; color:#fff; font-size:10px; line-height:1.25; padding:2px 5px; margin-top:2px; border-radius:5px; white-space:normal; word-break:break-word; border:1px solid ${e.color.fg};">${extraChipLabel(e)}</div>`).join("");
+      const isZeroHol = showZeroHolidays() && zeroHolidays.has(k);
       const dnumColor = isToday?'var(--text-accent)':(hol?'var(--text-danger)':(dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-secondary)'));
-      const cellBg = isToday?'var(--bg-accent-muted)':(hol?'#f8d7d7':'var(--surface-2)');
-      const holLabel = hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
+      const cellBg = isToday?'var(--bg-accent-muted)':(hol?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
+      const holLabel = (hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'')
+        +(isZeroHol?`<div title="ZERO休み" style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.1; margin-top:1px;">ZERO休み</div>`:'');
       cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
         <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getDate()}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
         <div style="height:${spanAreaH}px;"></div>${chips}${extraChips}</div>`;
@@ -829,10 +915,9 @@ function renderCalendar(){
       const weekKeys=week.map(dt=>dt?keyOf(dt):null);
       let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}}
       if(fc<0) return;
-      const slot=slotMap.get(e)??0;
-      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+slot*(ROW+GAP);
+      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+e.slot*(ROW+GAP);
       const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
-      const c=WORKCOLOR[e.work], bg=e.done?c.done:c.bg, fg=c.fg;
+      const c=effColor(e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
       const radius=`${startsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${startsHere?'6px':'2px'}`;
       overlay+=`<div class="span" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; height:${ROW}px; line-height:${ROW}px; font-size:10px; padding:0 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500;">${labelText(e)}</div>`;
     });
@@ -842,16 +927,184 @@ function renderCalendar(){
 
   const grid=document.getElementById("calgrid");
   grid.innerHTML=headRow+weeksHtml;
+  wireCalendar(grid);
+}
 
+// ===== レーンモード描画 =====
+// groupBySite=true : 現場ごとに固定レーンで高さを揃える（絞り込み時）
+// groupBySite=false: 現場でまとめず、各日その日の予定を上から詰める（全件表示。帯エリア廃止）
+// スマホ縦向け：各日セル内にチップを折り返し表示（絶対配置しない・高さ可変）
+function renderCalendarFlow(spans, days){
+  const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
+  const tKey=todayKey();
+  let weeks=[]; for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
+  const wd=["日","月","火","水","木","金","土"];
+  const COLMIN=118;                       // 縦画面での1列の最低幅(px)。横スクロールで確保
+  const GTC=`grid-template-columns:repeat(7, minmax(${COLMIN}px, 1fr));`;
+  const innerMin=COLMIN*7+3*6+4;          // 内側の最低幅（列幅×7＋gap）
+  let inner=`<div style="min-width:${innerMin}px;">`;
+  inner+=`<div style="display:grid; ${GTC} gap:3px; margin-bottom:3px;">`+
+    wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
+
+  weeks.forEach(week=>{
+    inner+=`<div style="display:grid; ${GTC} gap:3px; margin-bottom:3px; align-items:stretch;">`;
+    week.forEach(dt=>{
+      const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey), hol=holidayName(k);
+      const isZeroHol = showZeroHolidays() && zeroHolidays.has(k);
+      const dnumColor = isToday?'var(--text-accent)':((hol||dow===0)?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-secondary)');
+      const cellBg = isToday?'var(--bg-accent-muted)':((hol||dow===0)?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
+      let chips="";
+      spans.forEach(e=>{ if(k>=e.start&&k<=e.end){ const c=effColor(e.work,e.site,e.color); const bg=e.done?c.done:c.bg;
+        chips+=`<div class="span" data-spankey="${e.site.id}__${e.work}" style="cursor:pointer; touch-action:pan-x pan-y pinch-zoom; background:${bg}; color:${c.fg}; font-size:11px; line-height:1.3; padding:3px 5px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`; } });
+      singlesOnDay(k).forEach((e,i)=>{ const c=effColor(e.work,e.site,e.color);
+        chips+=`<div class="chip" data-chipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-x pan-y pinch-zoom; background:${e.done?c.done:c.bg}; color:${c.fg}; font-size:11px; line-height:1.3; padding:3px 5px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${labelText(e)}</div>`; });
+      extraChipsOnDay(k).forEach((e,i)=>{
+        chips+=`<div class="xchip" data-xchipkey="${k}__${i}" style="cursor:pointer; touch-action:pan-x pan-y pinch-zoom; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; font-size:11px; line-height:1.3; padding:3px 5px; margin-top:2px; border-radius:4px; white-space:normal; word-break:break-word;">${extraChipLabel(e)}</div>`; });
+      const holLabel = (hol?`<div style="font-size:9px; color:var(--text-danger); line-height:1.15;">${hol}</div>`:'')
+        +(isZeroHol?`<div style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.15;">ZERO休み</div>`:'');
+      inner+=`<div class="daycell" data-day="${k}" style="min-height:56px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
+        <div style="font-size:12px; display:flex; align-items:center; gap:3px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getMonth()+1}/${dt.getDate()}${isToday?'<span style="font-size:8px; padding:0 3px; border-radius:3px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}${chips}</div>`;
+    });
+    inner+=`</div>`;
+  });
+  inner+=`</div>`;
+  // 縦画面は横スクロールで各列を広げる
+  const html=`<div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">${inner}</div>`;
+
+  const grid=document.getElementById("calgrid");
+  grid.innerHTML=html;
+  wireCalendar(grid);
+}
+
+function renderCalendarLanes(spans, days, groupBySite){
+  const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
+  const tKey=todayKey();
+  let weeks=[];
+  if(calView==="week") weeks=[days];
+  else { for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7)); }
+
+  // スマホ縦は横スクロールで各列を広げる。列の最低幅とグリッド指定を切替
+  const scrollX = isPhonePortrait();
+  const COLMIN = 122;
+  const GTC = scrollX ? `grid-template-columns:repeat(7, minmax(${COLMIN}px,1fr));` : `grid-template-columns:repeat(7,1fr);`;
+  const innerMinPx = scrollX ? (COLMIN*7 + 4*6 + 4) : 0;
+
+  const wd=["日","月","火","水","木","金","土"];
+  let headRow;
+  if(calView==="week"){
+    headRow=`<div style="display:grid; ${GTC} gap:4px; margin-bottom:4px;">`+days.map(dt=>`<div style="text-align:center; font-size:11px; color:${dt.getDay()===0?'var(--text-danger)':dt.getDay()===6?'var(--text-accent)':'var(--text-secondary)'};">${wd[dt.getDay()]} ${dt.getMonth()+1}/${dt.getDate()}</div>`).join("")+`</div>`;
+  } else {
+    headRow=`<div style="display:grid; ${GTC} gap:4px; margin-bottom:4px;">`+wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
+  }
+
+  const colW=100/7, topPad=26;
+  // チップ内の折返し行数を列幅から推定（可変高）。スマホ縦は最低列幅で計算
+  const gridW=(document.getElementById("calgrid")||{}).clientWidth||840;
+  const colPx=scrollX ? COLMIN : gridW/7;
+  const chipInnerPx=Math.max(28, colPx-8-10);
+  const CHAR_PX=6.4, LH=14, VPAD=6;
+  const estLines=(txt)=>{ const s=String(txt||""); const perLine=Math.max(3, Math.floor(chipInnerPx/CHAR_PX)); return Math.max(1, Math.ceil([...s].length/perLine)); };
+  const itemH=(txt)=> estLines(txt)*LH+VPAD;       // チップ高さ(px)
+  let weeksHtml="";
+  weeks.forEach(week=>{
+    const weekKeys=week.map(dt=>dt?keyOf(dt):null);
+    // グルーピングキー：現場別 or 全件（"_all"に集約）
+    const gid=(id)=> groupBySite ? id : "_all";
+    const siteOrder=[]; const seen=new Set();
+    const spanBySite={};        // gid -> spans[]
+    const singleByCell={};      // "gid__dayIndex" -> [{kind,e,i,k}]
+    const noteFirst=(g)=>{ if(!seen.has(g)){ seen.add(g); siteOrder.push(g); } };
+
+    spans.forEach(e=>{ let fc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){fc=c;break;}} if(fc<0)return; const g=gid(e.site.id); (spanBySite[g]=spanBySite[g]||[]).push(e); noteFirst(g); });
+    for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
+      singlesOnDay(k).forEach((e,i)=>{ const g=gid(e.site.id); noteFirst(g); const kk=g+"__"+c; (singleByCell[kk]=singleByCell[kk]||[]).push({kind:"chip",e,i,k}); });
+      extraChipsOnDay(k).forEach((e,i)=>{ const g=gid(e.site.id); noteFirst(g); const kk=g+"__"+c; (singleByCell[kk]=singleByCell[kk]||[]).push({kind:"xchip",e,i,k}); });
+    }
+
+    // レーン高さ(px)＝その週で「同一グループ・同一日」に積まれるチップ高さ合計の最大
+    const laneH={}, laneBasePx={}; let cursorPx=0;
+    siteOrder.forEach(g=>{
+      let maxDay=LH+VPAD; // 最低1行
+      for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
+        let hsum=0, cnt=0;
+        (spanBySite[g]||[]).forEach(e=>{ if(k>=e.start&&k<=e.end){ hsum+=itemH(labelText(e)); cnt++; } });
+        const arr=singleByCell[g+"__"+c]; if(arr) arr.forEach(it=>{ hsum+=itemH(it.kind==="chip"?labelText(it.e):extraChipLabel(it.e)); cnt++; });
+        if(cnt>0){ hsum+=(cnt-1)*GAP; if(hsum>maxDay) maxDay=hsum; }
+      }
+      laneH[g]=maxDay; laneBasePx[g]=cursorPx; cursorPx+=maxDay+GAP;
+    });
+    const areaH=cursorPx;
+    const cellMinH=(calView==="week"?120:74);
+
+    // セル本体
+    let cellsHtml=`<div style="display:grid; ${GTC} gap:4px; position:relative;">`;
+    week.forEach(dt=>{
+      if(!dt){ cellsHtml+=`<div></div>`; return; }
+      const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey), hol=holidayName(k);
+      const isZeroHol = showZeroHolidays() && zeroHolidays.has(k);
+      const dnumColor = isToday?'var(--text-accent)':(hol?'var(--text-danger)':(dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-secondary)'));
+      const cellBg = isToday?'var(--bg-accent-muted)':((hol||dow===0)?'#f8d7d7':(isZeroHol?'#e5e7eb':'var(--surface-2)'));
+      const holLabel = (hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'')
+        +(isZeroHol?`<div title="ZERO休み" style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.1; margin-top:1px;">ZERO休み</div>`:'');
+      const dnumTxt = `${dt.getMonth()+1}/${dt.getDate()}`;
+      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
+        <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dnumTxt}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
+        <div style="height:${areaH}px;"></div></div>`;
+    });
+    cellsHtml+=`</div>`;
+
+    // オーバーレイ：現場レーンの上端から、その日のアイテムを高さぶん積む（可変高）
+    let overlay=`<div style="position:absolute; inset:0; pointer-events:none;">`;
+    const offPx={}; // "gid__c" -> その日の現在の縦オフセット(px)
+    const takeOff=(id,c,h)=>{ const kk=id+"__"+c; const v=offPx[kk]||0; offPx[kk]=v+h+GAP; return v; };
+    // 帯（開始日で高さを確保し、掛かる各日を同じtopに置き、各日のオフセットを進める）
+    siteOrder.forEach(id=>{ (spanBySite[id]||[]).forEach(e=>{
+      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}} if(fc<0)return;
+      const h=itemH(labelText(e));
+      const sub=takeOff(id,fc,h);
+      for(let c=fc+1;c<=lc;c++){ const kk=id+"__"+c; if((offPx[kk]||0)<=sub) offPx[kk]=sub+h+GAP; }
+      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+laneBasePx[id]+sub;
+      const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
+      const c=effColor(e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
+      const radius=`${startsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${startsHere?'6px':'2px'}`;
+      overlay+=`<div class="span" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:normal; word-break:break-word; overflow:hidden; font-weight:500;">${labelText(e)}</div>`;
+    }); });
+    // 単日・追加（帯の下から順に）
+    for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
+      siteOrder.forEach(id=>{ const arr=singleByCell[id+"__"+c]; if(!arr)return;
+        arr.forEach(item=>{
+          const label = item.kind==="chip"?labelText(item.e):extraChipLabel(item.e);
+          const h=itemH(label);
+          const sub=takeOff(id,c,h);
+          const top=topPad+laneBasePx[id]+sub, left=c*colW;
+          if(item.kind==="chip"){ const e=item.e; const c2=effColor(e.work,e.site,e.color);
+            overlay+=`<div class="chip" data-chipkey="${k}__${item.i}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:5px; background:${e.done?c2.done:c2.bg}; color:${c2.fg}; white-space:normal; word-break:break-word; overflow:hidden;">${labelText(e)}</div>`;
+          } else { const e=item.e;
+            overlay+=`<div class="xchip" data-xchipkey="${k}__${item.i}" title="${extraChipLabel(e)}（実施）" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:5px; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; white-space:normal; word-break:break-word; overflow:hidden;">${extraChipLabel(e)}</div>`;
+          }
+        });
+      });
+    }
+    overlay+=`</div>`;
+    weeksHtml+=`<div style="position:relative; margin-bottom:4px;">${cellsHtml}${overlay}</div>`;
+  });
+
+  const grid=document.getElementById("calgrid");
+  if(scrollX){ grid.innerHTML=`<div style="overflow-x:auto; -webkit-overflow-scrolling:touch;"><div style="min-width:${innerMinPx}px;">${headRow}${weeksHtml}</div></div>`; } else { grid.innerHTML=headRow+weeksHtml; }
+  wireCalendar(grid);
+}
+
+// span/chip/xchip のイベント配線＋末尾処理（通常/レーンモードで共通）
+function wireCalendar(grid){
   grid.querySelectorAll(".span").forEach(el=>{
     const [id,w]=el.dataset.spankey.split("__");
-    const s=sites.find(x=>x.id===Number(id)); const wk=s.works[w]; const c=WORKCOLOR[w];
-    el.addEventListener("pointerdown",(e)=>{ if(!isPhone()){ e.preventDefault(); e.stopPropagation(); } startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>openSpanEditor(s,w)}); });
+    const s=sites.find(x=>x.id===Number(id)); const wk=s.works[w]; const c=effColor(w,s,wk.calColor);
+    el.addEventListener("pointerdown",(e)=>{ if(!isPhone()){ e.preventDefault(); e.stopPropagation(); } startDrag(el,e,{type:"span",id:Number(id),w,label:el.textContent,bg:wk.act?c.done:c.bg,fg:c.fg,onClick:()=>{ openSpanEditor(s,w); if(singleVendorFilter()) showColorPicker({kind:"span",id:Number(id),w}); }}); });
   });
   grid.querySelectorAll(".chip").forEach(el=>{
     const [k,idx]=el.dataset.chipkey.split("__");
-    const list=singlesOnDay(k); const e=list[Number(idx)]; if(!e) return; const c=WORKCOLOR[e.work];
-    el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); }}); });
+    const list=singlesOnDay(k); const e=list[Number(idx)]; if(!e) return; const c=effColor(e.work,e.site,e.color);
+    el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"chip",ref:e.ref,label:el.textContent,bg:e.done?c.done:c.bg,fg:c.fg,onClick:()=>{ const s=sites.find(x=>x.id===e.ref.id); if(e.ref.kind==="single")openDateInline(el,s.works[e.ref.w].plan,v=>{s.works[e.ref.w].plan=v; syncAndRefresh(s);}); else openDateInline(el,s.works[e.ref.w].items[e.ref.ix].plan,v=>{s.works[e.ref.w].items[e.ref.ix].plan=v; syncAndRefresh(s);}); if(singleVendorFilter()) showColorPicker(e.ref); }}); });
   });
   grid.querySelectorAll(".xchip").forEach(el=>{
     const [k,idx]=el.dataset.xchipkey.split("__");
@@ -859,7 +1112,7 @@ function renderCalendar(){
     if(e.kind==="mtg"){
       el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"mtg",id:e.site.id,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
         const s=sites.find(x=>x.id===e.site.id);
-        openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv)=>{ s.act[0]=dv; s.mtgTime=tv; refresh(); });
+        openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{ s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh(); },s.mtgEndTime,s.attendee);
       }}); });
       return;
     }
@@ -882,11 +1135,47 @@ function renderCalendar(){
   });
 
   renderUnassigned();
+  // 色ピッカーの再評価（絞り込みが単一業者でなくなったら隠す）
+  const cp=document.getElementById("calcolorpicker");
+  if(cp){ if(colorTargetRef && singleVendorFilter() && refByTarget(colorTargetRef)) showColorPicker(colorTargetRef); else { cp.style.display="none"; colorTargetRef=null; } }
+}
+
+// 要件6：単一業者絞り込み時に、クリックした予定の表示色を変更するパネル
+let colorTargetRef=null;
+function refByTarget(ref){
+  const s=sites.find(x=>x.id===ref.id); if(!s) return null;
+  if(ref.kind==="multi"){ const it=(s.works[ref.w].items||[])[ref.ix]; return it?{obj:it,site:s,work:ref.w}:null; }
+  const wk=s.works[ref.w]; return wk?{obj:wk,site:s,work:ref.w}:null;
+}
+function showColorPicker(ref){
+  const box=document.getElementById("calcolorpicker"); if(!box) return;
+  if(!singleVendorFilter()){ box.style.display="none"; colorTargetRef=null; return; }
+  const t=refByTarget(ref); if(!t){ box.style.display="none"; return; }
+  colorTargetRef=ref;
+  const cur=t.obj.calColor||null;
+  const label=`[${WORKABBR[t.work]}]${t.site.name} ${t.site.room}`;
+  const sw=CAL_PALETTE.map(p=>{
+    const on = cur && cur.done===p.done;
+    return `<button data-cc="${p.done}" title="${p.name}" style="width:26px; height:26px; border-radius:6px; background:${p.bg}; border:2px solid ${on?p.fg:'transparent'}; cursor:pointer; padding:0;"></button>`;
+  }).join("");
+  box.style.display="block";
+  box.innerHTML=`<div style="background:var(--surface-1); border:0.5px solid var(--border); border-radius:10px; padding:10px 12px;">
+    <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">表示色を変更（${label}）<span style="color:var(--text-muted);">※この業者に絞り込んだ時だけ反映</span></div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${sw}
+      <button id="ccreset" style="font-size:11px; padding:4px 10px; margin-left:6px;">標準色に戻す</button>
+      <button id="ccclose" style="font-size:11px; padding:4px 10px; margin-left:auto;">閉じる</button>
+    </div></div>`;
+  box.querySelectorAll("[data-cc]").forEach(el=>el.addEventListener("click",()=>{
+    const p=CAL_PALETTE.find(x=>x.done===el.dataset.cc); const t2=refByTarget(colorTargetRef); if(!t2||!p) return;
+    t2.obj.calColor={bg:p.bg,done:p.done,fg:p.fg}; refresh(); showColorPicker(colorTargetRef);
+  }));
+  box.querySelector("#ccreset").onclick=()=>{ const t2=refByTarget(colorTargetRef); if(t2){ delete t2.obj.calColor; refresh(); showColorPicker(colorTargetRef); } };
+  box.querySelector("#ccclose").onclick=()=>{ box.style.display="none"; colorTargetRef=null; };
 }
 
 function renderUnassigned(){
   const ua=document.getElementById("unassigned");
-  const vmatch=(v)=>calVendor==="all"||v===calVendor;
+  const vmatch=(v)=>vendorMatch(v);
   // 入居前清掃・鍵交換は工事(WORKDEF)ではないため未手配リストの対象外
   const isExtra = (calWork===EXTRA_MTG.key||calWork===EXTRA_MOVEIN.key||calWork===EXTRA_KEY.key);
   if(isExtra){ ua.innerHTML=`<div style="font-size:12px; color:var(--text-muted);">${calWork}の実施日は工事進捗管理表で入力します（発注・実施）。</div>`; return; }
@@ -983,24 +1272,44 @@ function timeOptionsHtml(cur){
     MTG_MINUTES.map(v=>`<option value="${v}"${v===cm?' selected':''}>${v}</option>`).join("")+`</select>`;
   return `${h}<span style="align-self:center;">:</span>${m}`;
 }
-// 日付と時刻を同時に編集する小ポップアップ（退去立会用。時刻はプリセット選択）
-function openDateTimeInline(anchorEl,curDate,curTime,cb){
+// 時刻セレクト（id接頭辞付き）。開始/終了で使い回す
+function timeOptionsHtmlId(prefix,cur){
+  const [ch,cm]=(cur||"").split(":");
+  let h=`<select id="${prefix}h" style="font-size:13px; padding:3px 4px;"><option value="">--</option>`+
+    MTG_HOURS.map(x=>{const v=String(x).padStart(2,"0"); return `<option value="${v}"${v===ch?' selected':''}>${v}</option>`;}).join("")+`</select>`;
+  let m=`<select id="${prefix}m" style="font-size:13px; padding:3px 4px;"><option value="">--</option>`+
+    MTG_MINUTES.map(v=>`<option value="${v}"${v===cm?' selected':''}>${v}</option>`).join("")+`</select>`;
+  return `${h}<span style="align-self:center;">:</span>${m}`;
+}
+// 日付＋時刻(開始/終了)＋立会者を編集する小ポップアップ（退去立会用）
+function openDateTimeInline(anchorEl,curDate,curTime,cb,curEndTime,curAttendee){
   const old=document.getElementById("inlinedt"); if(old) old.remove();
   const box=document.createElement("div");
   box.id="inlinedt";
-  box.style.cssText="position:fixed; z-index:10000; display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); box-shadow:0 4px 14px rgba(0,0,0,.15);";
-  box.innerHTML=`<label style="font-size:11px; color:var(--text-secondary);">日付<br><input type="date" id="dtd" value="${curDate||''}" style="width:160px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;"></label>
-    <div style="font-size:11px; color:var(--text-secondary);">時刻<br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtml(curTime)}</div></div>
+  box.style.cssText="position:fixed; z-index:10000; display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); box-shadow:0 4px 14px rgba(0,0,0,.15);";
+  const attOpts=`<option value="">--</option>`+ATTENDEES.map(a=>`<option value="${a}"${a===(curAttendee||'')?' selected':''}>${a}</option>`).join("");
+  box.innerHTML=`<label style="font-size:11px; color:var(--text-secondary);">日付<br><input type="date" id="dtd" value="${curDate||''}" style="width:170px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;"></label>
+    <div style="font-size:11px; color:var(--text-secondary);">開始時刻<br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtmlId("dts",curTime)}</div></div>
+    <div style="font-size:11px; color:var(--text-secondary);">終了時刻<span style="color:var(--text-muted);">（幅がある場合のみ）</span><br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtmlId("dte",curEndTime)}</div></div>
+    <label style="font-size:11px; color:var(--text-secondary);">立会者<br><select id="dtatt" style="width:170px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;">${attOpts}</select></label>
     <div style="display:flex; gap:6px; justify-content:flex-end;"><button id="dtok" style="font-size:12px; padding:3px 12px;">確定</button></div>`;
   document.body.appendChild(box);
   const r=anchorEl.getBoundingClientRect();
+  const bw=200, bh=box.offsetHeight||250;
   let left=r.left, top=r.bottom+4;
-  if(left+200>window.innerWidth-6) left=window.innerWidth-6-200;
+  if(left+bw>window.innerWidth-6) left=window.innerWidth-6-bw;
   if(left<6) left=6;
-  if(top+150>window.innerHeight-6) top=Math.max(6, r.top-150);
-  box.style.left=left+"px"; box.style.top=top+"px";
+  if(top+bh>window.innerHeight-6) top=Math.max(6, r.top-bh-4);
+  box.style.left=left+"px"; box.style.top=Math.max(6,top)+"px";
   let done=false;
-  const finish=()=>{ if(done)return; done=true; const dv=box.querySelector("#dtd").value||null; const hh=box.querySelector("#dth").value, mm=box.querySelector("#dtm").value; const tv=(hh&&mm)?`${hh}:${mm}`:null; box.remove(); document.removeEventListener("pointerdown",outside,true); cb(dv,tv); };
+  const finish=()=>{ if(done)return; done=true;
+    const dv=box.querySelector("#dtd").value||null;
+    const sh=box.querySelector("#dtsh").value, sm=box.querySelector("#dtsm").value; const tv=(sh&&sm)?`${sh}:${sm}`:null;
+    const eh=box.querySelector("#dteh").value, em=box.querySelector("#dtem").value; let ev=(eh&&em)?`${eh}:${em}`:null;
+    if(ev && !tv) ev=null;                    // 開始が無いのに終了だけは無効
+    if(ev && tv && ev<=tv) ev=null;           // 終了≦開始は幅なし扱い
+    const av=box.querySelector("#dtatt").value||null;
+    box.remove(); document.removeEventListener("pointerdown",outside,true); cb(dv,tv,ev,av); };
   const cancel=()=>{ if(done)return; done=true; box.remove(); document.removeEventListener("pointerdown",outside,true); };
   const outside=(e)=>{ if(!box.contains(e.target)) finish(); };
   box.querySelector("#dtok").addEventListener("click",finish);
@@ -1074,7 +1383,7 @@ let saving=false, pendingSave=false;
 let dirty=false; // 未保存のローカル変更がある間はtrue（自動取込を止める）
 
 function serializeData(){
-  return JSON.stringify({ v:SCHEMA_VERSION, savedAt:new Date().toISOString(), nextId, vendorMaster, buildingMaster, sites });
+  return JSON.stringify({ v:SCHEMA_VERSION, savedAt:new Date().toISOString(), nextId, vendorMaster, buildingMaster, zeroHolidays:[...zeroHolidays], sites });
 }
 function normalizeSite(raw){
   const s=Object.assign(newSite(raw.id,raw.name,raw.room,raw.category), raw, {open:false});
@@ -1083,10 +1392,13 @@ function normalizeSite(raw){
   s.plan=fix6(s.plan); s.act=fix6(s.act);
   if(!s.works||typeof s.works!=="object") s.works={};
   Object.keys(s.works).forEach(w=>{ const wk=s.works[w]; if(!wk||typeof wk!=="object"){ delete s.works[w]; return; }
-    if(Array.isArray(wk.items)){ wk.items=wk.items.filter(it=>it&&typeof it==="object").map(it=>({name:it.name||"",plan:it.plan||null,act:it.act||null,vendor:it.vendor||null})); }
+    if(Array.isArray(wk.items)){ wk.items=wk.items.filter(it=>it&&typeof it==="object").map(it=>({name:it.name||"",plan:it.plan||null,act:it.act||null,vendor:it.vendor||null,calColor:it.calColor||null})); }
   });
   if(!s.moveinClean||typeof s.moveinClean!=="object") s.moveinClean={order:null,done:null};
   if(!s.keyChange||typeof s.keyChange!=="object") s.keyChange={order:null,done:null};
+  if(s.mtgEndTime===undefined) s.mtgEndTime=null;
+  if(s.attendee===undefined) s.attendee=null;
+  if(s.memo===undefined) s.memo="";
   return s;
 }
 function applyData(obj){
@@ -1094,7 +1406,10 @@ function applyData(obj){
   sites = obj.sites.map(normalizeSite);
   if(Array.isArray(obj.vendorMaster)&&obj.vendorMaster.length) vendorMaster=obj.vendorMaster;
   if(Array.isArray(obj.buildingMaster)) buildingMaster=obj.buildingMaster;
+  zeroHolidays = new Set(Array.isArray(obj.zeroHolidays)?obj.zeroHolidays:[]);
   if(typeof obj.nextId==="number") nextId=obj.nextId;
+  hankakuizeAll();
+  bootRendered=true; dataLoaded=true;
   syncAllPhase5(); renderStats(); renderBody(); renderCalendar();
 }
 function setSyncStatus(msg,ok){ const el=document.getElementById("syncStatus"); if(!el)return; el.textContent=msg; el.style.color= ok===false?"var(--text-danger)":ok===true?"var(--text-success)":"var(--text-muted)"; }
@@ -1108,20 +1423,21 @@ function saveGasToken(t){ try{ localStorage.setItem("gasToken",t); }catch(_){ } 
 
 // 起動時：シートから読み込み
 async function cloudLoad(silent){
-  if(!GAS_URL){ if(!silent) setSyncStatus("接続先URLが未設定です（設定を開いて入力）",false); return; }
+  if(!GAS_URL){ if(!silent) setSyncStatus("接続先URLが未設定です（設定を開いて入力）",false); return "error"; }
   setSyncStatus("読み込み中…");
   try{
     const url=GAS_URL+(GAS_URL.includes("?")?"&":"?")+"token="+encodeURIComponent(GAS_TOKEN);
     const res=await fetch(url,{method:"GET"});
     const j=await res.json();
-    if(!j.ok){ if(j.error==="unauthorized"){ setSyncStatus("合言葉が違います（接続設定を確認）",false); return; } throw new Error(j.error||"error"); }
+    if(!j.ok){ if(j.error==="unauthorized"){ setSyncStatus("合言葉が違います（接続設定を確認）",false); return "error"; } throw new Error(j.error||"error"); }
     lastUpdatedAt=j.updatedAt||"";
-    if(j.data){ applyData(JSON.parse(j.data)); dirty=false; setSyncStatus(`読み込みました（更新 ${fmtStamp(lastUpdatedAt)}）`,true); }
-    else { setSyncStatus("シートは空です。現在の内容を保存すると初期データになります。"); }
-  }catch(e){ setSyncStatus("読み込みに失敗しました（URL・共有設定を確認）",false); }
+    if(j.data){ applyData(JSON.parse(j.data)); dirty=false; setSyncStatus(`読み込みました（更新 ${fmtStamp(lastUpdatedAt)}）`,true); return "loaded"; }
+    else { setSyncStatus("シートは空です。現在の内容を保存すると初期データになります。"); return "empty"; }
+  }catch(e){ setSyncStatus("読み込みに失敗しました（URL・共有設定を確認）",false); return "error"; }
 }
 async function cloudSave(){
   if(!GAS_URL){ setSyncStatus("接続先URLが未設定です",false); return; }
+  if(!dataLoaded){ setSyncStatus("データ未読込のため保存を中止しました（ダミー上書き防止）。最新を読込してください。",false); return; }
   if(saving){ pendingSave=true; return; }
   saving=true; setSyncStatus("保存中…");
   try{
@@ -1160,7 +1476,7 @@ function isEditing(){
   if(dirty) return true;
   // 日付/時刻の入力ポップアップ、列フィルター、各種モーダルが開いている
   if(document.getElementById("inlinedate")||document.getElementById("inlinedt")||document.getElementById("inlinetime")) return true;
-  if(document.getElementById("colfilterpop")||document.getElementById("settingsmodal")||document.getElementById("newsitemodal")) return true;
+  if(document.getElementById("colfilterpop")||document.getElementById("settingsmodal")||document.getElementById("newsitemodal")||document.getElementById("zeroholmodal")||document.getElementById("pdfmonthmodal")) return true;
   // 自動保存待ち・保存中・ドラッグ中
   if(autoSaveTimer||saving||pendingSave) return true;
   if(typeof DND!=="undefined" && DND) return true;
@@ -1268,16 +1584,22 @@ function refresh(){ pickedSite=null; pickedWork=null; spanStart=null; dirty=true
 function pdfSpansForVendor(vendor){
   let e=[];
   sites.forEach(s=>{ Object.keys(s.works).forEach(w=>{ if(WORKDEF[w].type!=="span")return; const wk=s.works[w];
-    if(wk.start&&wk.end&&wk.vendor===vendor) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act}); }); });
+    if(wk.start&&wk.end&&wk.vendor===vendor) e.push({start:wk.start,end:wk.end,work:w,site:s,vendor:wk.vendor,done:!!wk.act,color:wk.calColor||null}); }); });
   return e;
 }
 function pdfSinglesOnDay(key,vendor){
   let out=[];
   sites.forEach(s=>{ Object.keys(s.works).forEach(w=>{ const t=WORKDEF[w].type, wk=s.works[w];
-    if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.plan===key&&it.vendor===vendor) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act}); }); }
-    else if(t==="single"){ if(wk.plan===key&&wk.vendor===vendor) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act}); }
+    if(t==="multi"){ (wk.items||[]).forEach(it=>{ if(it.plan===key&&it.vendor===vendor) out.push({work:w,site:s,vendor:it.vendor,name:it.name,done:!!it.act,color:it.calColor||null}); }); }
+    else if(t==="single"){ if(wk.plan===key&&wk.vendor===vendor) out.push({work:w,site:s,vendor:wk.vendor,done:!!wk.act,color:wk.calColor||null}); }
   }); });
   return out;
+}
+// PDF用の色解決：カレンダーの色変更(calColor)と、ZERO業者のクリーニング請求先色を反映
+function pdfColor(vendor,work,site,customColor){
+  if(customColor) return customColor;
+  if(vendor==="ZERO" && work==="クリーニング"){ return ZERO_BILL_COLOR[site.billTo]||WORKCOLOR["クリーニング"]; }
+  return WORKCOLOR[work];
 }
 // 一覧用：期間内に掛かる、その業者の全工事（span/single/multi明細）を集める
 function pdfListForVendor(vendor,days){
@@ -1298,37 +1620,71 @@ function pdfListForVendor(vendor,days){
   rows.sort((a,b)=>(a.start||"").localeCompare(b.start||"")||siteLabel(a.site).localeCompare(siteLabel(b.site)));
   return rows;
 }
+// PDFの主月を推定（月頭グリッドはその月、週送り時は42日中の最多月）
+function pdfGuessMonth(){
+  if(calView==="month" && calAnchor.getDate()===1) return {y:calAnchor.getFullYear(),m:calAnchor.getMonth()};
+  const days=daysInPeriod(); const cnt={};
+  days.forEach(dt=>{ const k=dt.getFullYear()+"-"+dt.getMonth(); cnt[k]=(cnt[k]||0)+1; });
+  let best=null,bn=-1; Object.keys(cnt).forEach(k=>{ if(cnt[k]>bn){bn=cnt[k];best=k;} });
+  const [y,m]=best.split("-").map(Number); return {y,m};
+}
+// PDFボタン：月を選ばせてから出力（請求用に「その月分」だけを出す）
 function buildPdf(){
   const vendor=calVendor;
-  if(vendor==="all"){ alert("PDFを作成するには、上の「全業者」プルダウンから業者を1つ選んでください。選んだ業者の工事だけを出力します。"); return; }
-
-  const days=daysInPeriod();
-  const y=calAnchor.getFullYear(), m=calAnchor.getMonth();
-  let perLabel;
-  if(calView==="week"){ const a=days[0],b=days[6]; perLabel=`${a.getFullYear()}年 ${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
-  else { const a=days[0],b=days[days.length-1]; perLabel=`${a.getFullYear()}年 ${a.getMonth()+1}/${a.getDate()} 〜 ${b.getMonth()+1}/${b.getDate()}`; }
-
+  if(vendor==="all"||vendor===VENDOR_AZ){ alert("PDFを作成するには、上の業者プルダウンから業者を1つ選んでください。選んだ業者の工事だけを出力します。"); return; }
+  const g=pdfGuessMonth();
+  openPdfMonthModal(g.y,g.m,vendor);
+}
+// 出力対象月を選ぶ小モーダル（デフォルトは現在の主月）
+function openPdfMonthModal(defY,defM,vendor){
+  const old=document.getElementById("pdfmonthmodal"); if(old) old.remove();
+  const ov=document.createElement("div");
+  ov.id="pdfmonthmodal";
+  ov.style.cssText="position:fixed; inset:0; z-index:11000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
+  // 前後6ヶ月ぶんの候補
+  const base=new Date(defY,defM,1); const opts=[];
+  for(let d=-6; d<=6; d++){ const dt=new Date(base.getFullYear(),base.getMonth()+d,1); opts.push({y:dt.getFullYear(),m:dt.getMonth()}); }
+  const optHtml=opts.map(o=>`<option value="${o.y}-${o.m}"${(o.y===defY&&o.m===defM)?' selected':''}>${o.y}年${o.m+1}月</option>`).join("");
+  ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:20px; width:300px; max-width:92vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
+    <div style="font-size:15px; font-weight:600; margin-bottom:6px;">業者向けPDF：対象月</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">選んだ月の工事分のみを出力します（請求用）。業者：<b>${escapeHtml(vendor)}</b></div>
+    <select id="pdfMonthSel" style="width:100%; box-sizing:border-box; font-size:14px; padding:7px 9px; margin-bottom:16px;">${optHtml}</select>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button id="pdfmCancel" style="font-size:13px; padding:6px 14px;">キャンセル</button>
+      <button id="pdfmOk" style="font-size:13px; padding:6px 16px; background:var(--text-accent); color:#fff; border-color:var(--text-accent);">PDF作成</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector("#pdfmCancel").onclick=close;
+  ov.querySelector("#pdfmOk").onclick=()=>{ const [y,m]=ov.querySelector("#pdfMonthSel").value.split("-").map(Number); close(); buildPdfForMonth(y,m,vendor); };
+  ov.querySelector("#pdfMonthSel").focus();
+}
+function buildPdfForMonth(pdfY,pdfM,vendor){
+  // 対象月の1日を含む週から6週グリッド（当月分だけ工事を描く）
+  const gs=(()=>{ const d=new Date(pdfY,pdfM,1); const dow=d.getDay(); const s=new Date(d); s.setDate(d.getDate()-dow); s.setHours(0,0,0,0); return s; })();
+  const days=Array.from({length:42},(_,i)=>{ const x=new Date(gs); x.setDate(gs.getDate()+i); return x; });
+  const perLabel=`${pdfY}年${pdfM+1}月分`;
+  const inMonth=(dt)=> dt.getFullYear()===pdfY && dt.getMonth()===pdfM;
+  buildPdfCore(vendor, days, perLabel, inMonth);
+}
+function buildPdfCore(vendor, days, perLabel, inMonth){
   const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
   const tKey=todayKey();
 
-  // 週組み（renderCalendarと同じ規則）
+  // 週組み
   let weeks=[];
-  if(calView==="week") weeks=[days];
-  else { const firstDow=days[0].getDay(); let row=new Array(firstDow).fill(null); days.forEach(dt=>{row.push(dt); if(row.length===7){weeks.push(row); row=[];}}); if(row.length){while(row.length<7)row.push(null); weeks.push(row);} }
+  for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
 
-  // スロット割当（帯の重なり回避、renderCalendarと同じ／週ごとに上詰め）
-  let spans=pdfSpansForVendor(vendor);
+  // スロット割当（帯の重なり回避、renderCalendarと同じ）
+  let spans=pdfSpansForVendor(vendor).filter(e=>{ // 対象月に1日でも掛かる帯のみ
+    if(!inMonth) return true;
+    let d=parseISO(e.start), end=parseISO(e.end);
+    for(let x=new Date(d); x<=end; x.setDate(x.getDate()+1)){ if(inMonth(x)) return true; }
+    return false;
+  });
   spans.sort((a,b)=>a.start.localeCompare(b.start));
-  const keyOfSlot=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
-  function assignSlotsForWeek(week){
-    const wk=week.filter(Boolean).map(dt=>keyOfSlot(dt));
-    if(!wk.length) return {map:new Map(),max:0};
-    const wStart=wk[0], wEnd=wk[wk.length-1];
-    const inWeek=spans.filter(e=>e.start<=wEnd&&e.end>=wStart).sort((a,b)=>a.start.localeCompare(b.start)||a.end.localeCompare(b.end));
-    const slotEnds=[]; const map=new Map();
-    inWeek.forEach(e=>{ let sl=0; while(sl<slotEnds.length&&slotEnds[sl]>=e.start)sl++; map.set(e,sl); slotEnds[sl]=e.end; });
-    return {map,max:slotEnds.length};
-  }
+  const slotEnds=[]; spans.forEach(e=>{let sl=0; while(sl<slotEnds.length&&slotEnds[sl]>=e.start)sl++; e.slot=sl; slotEnds[sl]=e.end;});
 
   const wd=["日","月","火","水","木","金","土"];
   const ROW2=16, GAP2=2, colW=100/7;
@@ -1343,10 +1699,11 @@ function buildPdf(){
     </div>`;
 
   // 凡例
-  const usedWorks=[...new Set([...spans.map(e=>e.work), ...weeks.flat().filter(Boolean).flatMap(dt=>pdfSinglesOnDay(keyOf(dt),vendor).map(e=>e.work))])];
+  const usedWorks=[...new Set([...spans.map(e=>e.work), ...weeks.flat().filter(Boolean).filter(dt=>!inMonth||inMonth(dt)).flatMap(dt=>pdfSinglesOnDay(keyOf(dt),vendor).map(e=>e.work))])];
   if(usedWorks.length){
     html+=`<div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px; font-size:11px;">`+
       usedWorks.map(w=>{const c=WORKCOLOR[w]; return `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:11px; height:11px; border-radius:2px; background:${c.bg}; border:1px solid ${c.fg};"></span>${w}</span>`;}).join("")+
+      (vendor==="ZERO"&&usedWorks.includes("クリーニング") ? `<span style="color:#666;">｜清掃色＝請求先：</span>`+Object.keys(ZERO_BILL_COLOR).map(b=>{const c=ZERO_BILL_COLOR[b]; return `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:11px; height:11px; border-radius:2px; background:${c.done}; border:1px solid ${c.fg};"></span>${b}</span>`;}).join("") : "")+
       `<span style="color:#666;">（濃い色＝完了済み）</span></div>`;
   }
 
@@ -1356,35 +1713,38 @@ function buildPdf(){
 
   // 週ごと
   weeks.forEach(week=>{
-    const {map:slotMap,max:usedSpanSlots}=assignSlotsForWeek(week);
+    let usedSpanSlots=0;
+    week.forEach(dt=>{ if(!dt)return; const k=keyOf(dt); spans.forEach(e=>{ if(k>=e.start&&k<=e.end) usedSpanSlots=Math.max(usedSpanSlots,e.slot+1); }); });
     const spanAreaH=usedSpanSlots*(ROW2+GAP2);
-    const topPad=22, cellMinH=(calView==="week"?96:64);
+    const topPad=22, cellMinH=64;
 
     let cellsHtml=`<div class="pdf-daygrid" style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; position:relative;">`;
     week.forEach(dt=>{
       if(!dt){ cellsHtml+=`<div></div>`; return; }
       const k=keyOf(dt), dow=dt.getDay(), isToday=(k===tKey);
+      const other = inMonth ? !inMonth(dt) : false;
       const hol=holidayName(k);
-      const singles=pdfSinglesOnDay(k,vendor);
-      const chips=singles.map(e=>`<div style="background:${e.done?WORKCOLOR[e.work].done:WORKCOLOR[e.work].bg}; border:1px solid ${WORKCOLOR[e.work].fg}; color:${WORKCOLOR[e.work].fg}; font-size:9px; line-height:1.25; padding:1px 4px; margin-top:2px; border-radius:4px; word-break:break-word;">${escapeHtml(pdfLabel(e))}</div>`).join("");
-      const dnumColor = dow===0?'#c0392b':(hol?'#c0392b':dow===6?'#2563eb':'#555');
-      const cellBg = isToday?'#eef3fd':(hol?'#f8d7d7':'#fff');
-      const holLabel = hol?`<div style="font-size:8px; color:#c0392b; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
+      const singles = other ? [] : pdfSinglesOnDay(k,vendor);
+      const chips=singles.map(e=>{const c=pdfColor(vendor,e.work,e.site,e.color); return `<div style="background:${e.done?c.done:c.bg}; border:1px solid ${c.fg}; color:${c.fg}; font-size:9px; line-height:1.25; padding:1px 4px; margin-top:2px; border-radius:4px; word-break:break-word;">${escapeHtml(pdfLabel(e))}</div>`;}).join("");
+      const dnumColor = other?'#bbb':(dow===0?'#c0392b':(hol?'#c0392b':dow===6?'#2563eb':'#555'));
+      const cellBg = other?'#f4f4f4':(isToday?'#eef3fd':(hol?'#f8d7d7':'#fff'));
+      const dnumTxt = other ? `${dt.getMonth()+1}/${dt.getDate()}` : `${dt.getDate()}`;
+      const holLabel = (!other&&hol)?`<div style="font-size:8px; color:#c0392b; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'';
       cellsHtml+=`<div class="pdf-daycell" style="min-height:${cellMinH}px; border:${isToday?'1.2px solid #2563eb':'0.5px solid #ccc'}; border-radius:6px; padding:3px; background:${cellBg};">
-        <div style="font-size:11px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dt.getDate()}${isToday?' <span style="font-size:8px; padding:0 3px; border-radius:3px; background:#dbeafe; color:#2563eb;">今日</span>':''}</div>${holLabel}
+        <div style="font-size:11px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dnumTxt}${(!other&&isToday)?' <span style="font-size:8px; padding:0 3px; border-radius:3px; background:#dbeafe; color:#2563eb;">今日</span>':''}</div>${holLabel}
         <div style="height:${spanAreaH}px;"></div>${chips}</div>`;
     });
     cellsHtml+=`</div>`;
 
     let overlay=`<div style="position:absolute; inset:0; pointer-events:none;">`;
     const weekKeys=week.map(dt=>dt?keyOf(dt):null);
+    const inMon=week.map(dt=>dt?(inMonth?inMonth(dt):true):false);
     spans.forEach(e=>{
-      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}}
+      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&inMon[c]&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}}
       if(fc<0) return;
-      const slot=slotMap.get(e)??0;
-      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+slot*(ROW2+GAP2);
+      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+e.slot*(ROW2+GAP2);
       const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
-      const c=WORKCOLOR[e.work], bg=e.done?c.done:c.bg, fg=c.fg;
+      const c=pdfColor(vendor,e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
       const radius=`${startsHere?'5px':'2px'} ${endsHere?'5px':'2px'} ${endsHere?'5px':'2px'} ${startsHere?'5px':'2px'}`;
       overlay+=`<div style="position:absolute; left:calc(${left}% + 3px); width:calc(${width}% - 6px); top:${top}px; height:${ROW2}px; line-height:${ROW2}px; font-size:9px; padding:0 4px; border-radius:${radius}; background:${bg}; border:1px solid ${fg}; color:${fg}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600;">${escapeHtml(pdfLabel(e))}</div>`;
     });
@@ -1393,7 +1753,11 @@ function buildPdf(){
   });
 
   // 現場名一覧（この業者の工事が期間内にある現場を1行ずつ。新項目＋金額合計）
-  const list=pdfListForVendor(vendor,days);
+  let list=pdfListForVendor(vendor,days);
+  if(inMonth){ list=list.filter(r=>{ // 対象月に掛かる工事のみ（帯は期間内に1日でも当月なら対象）
+    if(r.kind==="span" && r.start && r.end){ let d=parseISO(r.start), end=parseISO(r.end); for(let x=new Date(d); x<=end; x.setDate(x.getDate()+1)){ if(inMonth(x)) return true; } return false; }
+    return r.start ? inMonth(parseISO(r.start)) : false;
+  }); }
   // 現場ごとに集約（重複排除、順序は最初の予定日順）
   const siteOrder=[]; const seen=new Set();
   list.forEach(r=>{ if(!seen.has(r.site.id)){ seen.add(r.site.id); siteOrder.push(r.site); } });
@@ -1429,7 +1793,7 @@ function buildPdf(){
             <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">エアコン</th>
             <th style="padding:4px 6px; border:0.5px solid #ccc; text-align:right;">剥離</th>` : "";
 
-    // 列幅（table-layout:fixed）。左側を詰めて備考を最大化。合計は100%になるよう配分。
+    // 列幅（table-layout:fixed）。左側を詰めて備考を最大化。
     const colsPct=[];
     colsPct.push(9);                       // 作業予定日
     colsPct.push(15);                      // 現場名
@@ -1438,8 +1802,8 @@ function buildPdf(){
     colsPct.push(5);                       // 家具
     if(showMoney){ colsPct.push(8,8,7); }  // 清掃費・エアコン・剥離
     colsPct.push(9);                       // オートロック
-    const used=colsPct.reduce((a,b)=>a+b,0);
-    const notePct=Math.max(20,100-used);   // 備考（残り全部）
+    const usedPct=colsPct.reduce((a,b)=>a+b,0);
+    const notePct=Math.max(20,100-usedPct);// 備考（残り全部）
     colsPct.push(notePct);
     const colgroup=`<colgroup>${colsPct.map(w=>`<col style="width:${w}%;">`).join("")}</colgroup>`;
 
@@ -1519,18 +1883,23 @@ function buildPdf(){
   let printed=false;
   // 保存ダイアログの既定ファイル名は多くのブラウザで「親ページのdocument.title」を使うため、
   // 印刷の間だけ親のtitleをPDF名に差し替え、終了後に元へ戻す。
-  const restoreTitle=()=>{ document.title=APP_TITLE; };
+  let restored=false;
+  const restoreTitle=()=>{ if(restored)return; restored=true; document.title=APP_TITLE; };
   const doPrint=()=>{ if(printed)return; printed=true;
     try{
       const win=iframe.contentWindow;
       document.title=pdfTitle;           // 親ページのタイトルを一時変更
       win.focus(); win.print();
-    }catch(err){ alert("印刷の起動に失敗しました。ブラウザの印刷機能をご利用ください。"); }
-    finally{
-      // 印刷ダイアログが閉じた後に復元（afterprint、無ければ遅延で保険）
-      window.addEventListener("afterprint",restoreTitle,{once:true});
-      setTimeout(restoreTitle,60000);
-    }
+    }catch(err){ restoreTitle(); alert("印刷の起動に失敗しました。ブラウザの印刷機能をご利用ください。"); return; }
+    // 印刷ダイアログが閉じた後に確実にタイトルを戻す（複数の保険）
+    window.addEventListener("afterprint",restoreTitle,{once:true});
+    try{ iframe.contentWindow.addEventListener("afterprint",restoreTitle,{once:true}); }catch(_){}
+    // ダイアログを閉じてタブに戻った時に復元
+    const onVis=()=>{ if(document.visibilityState==="visible"){ restoreTitle(); document.removeEventListener("visibilitychange",onVis); } };
+    document.addEventListener("visibilitychange",onVis);
+    window.addEventListener("focus",restoreTitle,{once:true});
+    // 最終保険（短め）。保存ダイアログのファイル名確定には十分な猶予。
+    setTimeout(restoreTitle,3000);
   };
   iframe.addEventListener("load",doPrint);
   const idoc=iframe.contentWindow.document;
@@ -1541,6 +1910,51 @@ function buildPdf(){
 function pdfLabel(e){ const nm=e.name?`·${e.name}`:""; return `[${WORKABBR[e.work]}]${siteLabel(e.site)}${nm}`; }
 function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
+// 要件1①：ZERO休みを登録するミニカレンダー（複数日トグル可）
+function openZeroHolidayModal(){
+  const old=document.getElementById("zeroholmodal"); if(old) old.remove();
+  let viewY=calAnchor.getFullYear(), viewM=calAnchor.getMonth();
+  const ov=document.createElement("div");
+  ov.id="zeroholmodal";
+  ov.style.cssText="position:fixed; inset:0; z-index:11000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
+  ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:18px; width:340px; max-width:94vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
+    <div style="font-size:15px; font-weight:600; margin-bottom:4px;">ZERO休みの登録</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">日付をタップで登録／解除（複数選択可）。グレーの日がZERO休みです。</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <button id="zhPrev" style="font-size:13px; padding:3px 10px;">‹</button>
+      <span id="zhLabel" style="font-size:14px; font-weight:500;"></span>
+      <button id="zhNext" style="font-size:13px; padding:3px 10px;">›</button>
+    </div>
+    <div id="zhGrid"></div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+      <button id="zhClose" style="font-size:13px; padding:6px 16px; background:var(--text-accent); color:#fff; border-color:var(--text-accent);">閉じる</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>{ ov.remove(); refresh(); };
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector("#zhClose").onclick=close;
+  const wd=["日","月","火","水","木","金","土"];
+  const draw=()=>{
+    ov.querySelector("#zhLabel").textContent=`${viewY}年${viewM+1}月`;
+    const first=new Date(viewY,viewM,1), firstDow=first.getDay();
+    const ndays=new Date(viewY,viewM+1,0).getDate();
+    let cells=wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("");
+    for(let i=0;i<firstDow;i++) cells+=`<div></div>`;
+    for(let d=1;d<=ndays;d++){
+      const k=iso(viewY,viewM,d); const on=zeroHolidays.has(k); const hol=holidayName(k);
+      const dow=new Date(viewY,viewM,d).getDay();
+      const col=on?'#374151':(hol||dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-primary)');
+      cells+=`<div data-zk="${k}" style="text-align:center; font-size:13px; padding:7px 0; border-radius:6px; cursor:pointer; background:${on?'#d1d5db':'transparent'}; color:${col}; font-weight:${on?'600':'400'}; border:1px solid ${on?'#9ca3af':'transparent'};">${d}</div>`;
+    }
+    const g=ov.querySelector("#zhGrid");
+    g.innerHTML=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px;">${cells}</div>`;
+    g.querySelectorAll("[data-zk]").forEach(el=>el.addEventListener("click",()=>{ const k=el.dataset.zk; if(zeroHolidays.has(k))zeroHolidays.delete(k); else zeroHolidays.add(k); dirty=true; draw(); }));
+  };
+  ov.querySelector("#zhPrev").onclick=()=>{ viewM--; if(viewM<0){viewM=11;viewY--;} draw(); };
+  ov.querySelector("#zhNext").onclick=()=>{ viewM++; if(viewM>11){viewM=0;viewY++;} draw(); };
+  draw();
+}
+
 document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   const t=b.dataset.tab;
   document.querySelectorAll(".tabbtn").forEach(x=>{x.style.background="var(--surface-2)"; x.style.color="var(--text-secondary)"; x.style.borderColor="var(--border-strong)";});
@@ -1550,7 +1964,7 @@ document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
 }));
 function setView(v){ calView=v;
   if(v==="week"){ weekFromToday=true; calAnchor=new Date(TODAY); }
-  else { calAnchor=defaultMonthGridStart(); }
+  else { calAnchor=calDefaultAnchor(); }
   document.getElementById("viewmonth").style.color=v==="month"?"var(--text-primary)":"var(--text-secondary)";
   document.getElementById("viewmonth").style.background=v==="month"?"var(--surface-3)":"transparent";
   document.getElementById("viewweek").style.color=v==="week"?"var(--text-primary)":"var(--text-secondary)";
@@ -1562,8 +1976,27 @@ document.getElementById("viewweek").onclick=()=>setView("week");
 document.getElementById("sitesel").addEventListener("change",e=>{calSite=e.target.value; renderCalendar();});
 document.getElementById("worksel").addEventListener("change",e=>{calWork=e.target.value; renderCalendar();});
 document.getElementById("vendorsel").addEventListener("change",e=>{calVendor=e.target.value; renderCalendar();});
-document.getElementById("prevp").onclick=()=>{ if(calView==="week"){ if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); } calAnchor.setDate(calAnchor.getDate()-7); } else { calAnchor=new Date(calAnchor); calAnchor.setDate(calAnchor.getDate()-28); } renderCalendar();};
-document.getElementById("nextp").onclick=()=>{ if(calView==="week"){ if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); } calAnchor.setDate(calAnchor.getDate()+7); } else { calAnchor=new Date(calAnchor); calAnchor.setDate(calAnchor.getDate()+28); } renderCalendar();};
+// 週送り（両ビュー共通、±7日スライド）
+function shiftWeek(delta){
+  if(calView==="week"){
+    if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); }
+    calAnchor.setDate(calAnchor.getDate()+7*delta);
+  } else { calAnchor=new Date(calAnchor); calAnchor.setDate(calAnchor.getDate()+7*delta); }
+  renderCalendar();
+}
+// 月移動（月ビュー：当該月頭へ）
+function shiftMonth(delta){
+  if(calView==="week"){ if(weekFromToday){ weekFromToday=false; const dow=TODAY.getDay(); calAnchor=new Date(TODAY); calAnchor.setDate(TODAY.getDate()-dow); } calAnchor.setDate(calAnchor.getDate()+28*delta); }
+  else { calAnchor=new Date(calAnchor.getFullYear(),calAnchor.getMonth()+delta,1); }
+  renderCalendar();
+}
+document.getElementById("prevp").onclick=()=>shiftMonth(-1);
+document.getElementById("nextp").onclick=()=>shiftMonth(1);
+document.getElementById("prevw").onclick=()=>shiftWeek(-1);
+document.getElementById("nextw").onclick=()=>shiftWeek(1);
+// 画面幅変化でカレンダーのチップ折返し高さを再計算
+let __rzT=null;
+window.addEventListener("resize",()=>{ clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
 document.getElementById("filter").onchange=renderBody;
 document.getElementById("search").addEventListener("input",renderBody);
 document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{ sortKey=b.dataset.sort; renderBody(); }));
@@ -1574,6 +2007,7 @@ document.getElementById("btnExport").addEventListener("click",doExport);
 document.getElementById("btnImport").addEventListener("click",()=>document.getElementById("fileImport").click());
 document.getElementById("fileImport").addEventListener("change",(e)=>{ const f=e.target.files&&e.target.files[0]; if(f)doImport(f); e.target.value=""; });
 document.getElementById("pdfbtn").onclick=buildPdf;
+document.getElementById("zeroholbtn").onclick=openZeroHolidayModal;
 document.getElementById("addbtn").onclick=openNewSiteModal;
 function openNewSiteModal(){ openSiteModal(null); }
 function openEditSiteModal(id){ const s=sites.find(x=>x.id===id); if(s) openSiteModal(s); }
@@ -1627,12 +2061,44 @@ function openSiteModal(editSite){
   };
   ov.addEventListener("keydown",e=>{ if(e.key==="Escape")close(); });
 }
-renderHead(); calAnchor=defaultMonthGridStart();
-syncAllPhase5(); renderStats(); renderBody(); renderCalendar();
-// 共有接続：保存済みURLがあれば起動時にシートから読み込む
+// 起動時の初描画制御（共有接続時はダミーを見せずに読み込み後描画）
+let bootRendered=false;
+let dataLoaded=false; // 実データ(またはローカル試用)が確定したか。未確定のうちは保存を抑止しダミー流出を防ぐ
+function bootRender(){ if(bootRendered) return; bootRendered=true; renderStats(); renderBody(); renderCalendar(); }
+function showBootLoading(){
+  const tb=document.getElementById("tbody"); if(tb) tb.innerHTML=`<tr><td colspan="14" style="padding:2rem; text-align:center; color:var(--text-muted);">共有データを読み込み中…</td></tr>`;
+  const cg=document.getElementById("calgrid"); if(cg) cg.innerHTML=`<div style="padding:2rem; text-align:center; color:var(--text-muted);">共有データを読み込み中…</div>`;
+}
+// 読込できなかった時：サンプル(ダミー)は絶対に出さず、空表示にする
+function showBootEmpty(msg, emptySheet){
+  bootRendered=true; // サンプル描画を今後も抑止
+  sites=[];          // ダミーを保持しない
+  if(emptySheet){ dataLoaded=true; } // 本当に空のシートのみ、新規入力→保存を許可
+  const tb=document.getElementById("tbody"); if(tb) tb.innerHTML=`<tr><td colspan="14" style="padding:2rem; text-align:center; color:var(--text-muted);">${msg||"データを表示できません。"}</td></tr>`;
+  const cg=document.getElementById("calgrid"); if(cg) cg.innerHTML=`<div style="padding:2rem; text-align:center; color:var(--text-muted);">${msg||"データを表示できません。"}</div>`;
+  const ua=document.getElementById("unassigned"); if(ua) ua.innerHTML="";
+}
+renderHead(); calAnchor=calDefaultAnchor();
+hankakuizeAll();
+syncAllPhase5();
+// 共有接続：保存済みURLがあれば、サンプル(ダミー)を描かずに読み込み完了後に初描画する
 GAS_URL=loadGasUrl(); GAS_TOKEN=loadGasToken();
-if(GAS_URL){ cloudLoad(true); setSyncStatus("共有シートに接続中…"); startPolling(); }
-else { setSyncStatus("未接続：サンプル表示中。「接続設定」でURLを設定すると共有できます。"); }
+if(GAS_URL){
+  showBootLoading();
+  setSyncStatus("共有シートに接続中…");
+  cloudLoad(true).then((r)=>{
+    if(bootRendered) return;               // loaded時はapplyDataが描画済み
+    if(r==="empty") showBootEmpty("共有シートにデータがありません。新規現場を追加して保存できます。", true);
+    else showBootEmpty("読み込みに失敗しました。「最新を読込」または「接続設定」を確認してください。", false);
+  }).catch(()=>{ if(!bootRendered) showBootEmpty("読み込みに失敗しました。「接続設定」を確認してください。", false); });
+  // 保険：一定時間で読めなければ空表示（サンプルは出さない・保存も抑止）
+  setTimeout(()=>{ if(!bootRendered) showBootEmpty("読み込みに時間がかかっています。接続や通信状況を確認してください。", false); }, 8000);
+  startPolling();
+} else {
+  dataLoaded=true; // ローカル試用（未接続）は保存可
+  bootRender();
+  setSyncStatus("未接続：サンプル表示中。「接続設定」でURLを設定すると共有できます。");
+}
 </script>
 
 <div id="datepop" style="display:none; min-height:0;">
