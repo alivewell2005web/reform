@@ -22,7 +22,8 @@
 }
 *{box-sizing:border-box;}
 html,body{height:100%;}
-body{margin:0; padding:0; background:var(--bg); color:var(--text-primary); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; font-size:14px; overflow:hidden;}
+html{height:100%; overflow:hidden;}
+body{margin:0; padding:0; background:var(--bg); color:var(--text-primary); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; font-size:14px; overflow:hidden; position:fixed; top:0; left:0; right:0; bottom:0; width:100%; height:100%; overscroll-behavior:none;}
 button{background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:var(--radius); padding:6px 12px; cursor:pointer; color:var(--text-primary); font-family:inherit;}
 button:hover{background:var(--surface-3);}
 select,input[type=text],input[type=date]{background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:var(--radius); padding:6px 10px; color:var(--text-primary); font-family:inherit; width:100%;}
@@ -33,7 +34,7 @@ table{background:var(--surface-2);}
 .tabbtn{background:transparent;}
 .gearitem:hover{background:var(--surface-1);}
 .viewbtn{background:transparent;}
-#app{max-width:1200px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; padding:16px 16px 0; overflow:hidden; min-height:0;}
+#app{max-width:1200px; margin:0 auto; height:100dvh; height:100%; display:flex; flex-direction:column; padding:16px 16px 0; overflow:hidden; min-height:0;}
 @media (max-width:640px), (pointer:coarse){
   /* タッチ端末ではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
   #calgrid{ touch-action:pan-x pan-y pinch-zoom !important; }
@@ -2049,7 +2050,7 @@ document.getElementById("nextw").onclick=()=>{closeSpanEditor(); shiftWeek(1);};
 // 画面幅変化でカレンダーのチップ折返し高さを再計算
 let __rzT=null;
 function updateTabbarH(){ const t=document.getElementById("tabbar"); if(t) document.documentElement.style.setProperty("--tabbar-h", t.offsetHeight+"px"); }
-function updateAppH(){ const h=(window.visualViewport?window.visualViewport.height:window.innerHeight); const app=document.getElementById("app"); if(app) app.style.height=h+"px"; }
+function updateAppH(){ /* 高さはCSSの100dvh+flex連鎖に一本化。JSでの高さ上書きは行わない */ }
 function sizeMatrixScroll(){ /* flexレイアウトで高さ自動のため不要 */ }
 window.addEventListener("resize",()=>{ closeSpanEditor(); updateAppH(); updateTabbarH(); clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
 window.addEventListener("orientationchange",()=>{ setTimeout(updateAppH,300); });
