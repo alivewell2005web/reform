@@ -37,7 +37,11 @@ table{background:var(--surface-2);}
 @media (max-width:640px), (pointer:coarse){
   /* タッチ端末ではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
   #calgrid{ touch-action:pan-x pan-y pinch-zoom !important; }
-  #calgrid .chip, #calgrid .xchip, #calgrid .span{ touch-action:pan-x pan-y pinch-zoom !important; cursor:pointer !important; }
+  #calgrid .chip, #calgrid .xchip, #calgrid .span, #calgrid .pill{ touch-action:pan-x pan-y pinch-zoom !important; cursor:pointer !important; }
+  /* スクロールコンテナのタッチスクロールを保証。内部の touch-action:none がスクロールを殺すのを打ち消す */
+  #matrixscroll, #calscroll{ -webkit-overflow-scrolling:touch; overscroll-behavior:contain !important; }
+  #matrixscroll, #matrixscroll *, #calscroll{ touch-action:pan-x pan-y !important; }
+  #unassignedbtns .pill{ touch-action:pan-x pan-y !important; }
 }
 </style>
 </head>
@@ -2045,8 +2049,11 @@ document.getElementById("nextw").onclick=()=>{closeSpanEditor(); shiftWeek(1);};
 // 画面幅変化でカレンダーのチップ折返し高さを再計算
 let __rzT=null;
 function updateTabbarH(){ const t=document.getElementById("tabbar"); if(t) document.documentElement.style.setProperty("--tabbar-h", t.offsetHeight+"px"); }
+function updateAppH(){ const h=(window.visualViewport?window.visualViewport.height:window.innerHeight); const app=document.getElementById("app"); if(app) app.style.height=h+"px"; }
 function sizeMatrixScroll(){ /* flexレイアウトで高さ自動のため不要 */ }
-window.addEventListener("resize",()=>{ closeSpanEditor(); updateTabbarH(); clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
+window.addEventListener("resize",()=>{ closeSpanEditor(); updateAppH(); updateTabbarH(); clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
+window.addEventListener("orientationchange",()=>{ setTimeout(updateAppH,300); });
+if(window.visualViewport){ window.visualViewport.addEventListener("resize", updateAppH); }
 // カレンダー内の横スクロールで帯がずれるため、スクロール開始時にポップアップを閉じる
 document.getElementById("calwrap").addEventListener("scroll",()=>closeSpanEditor(),true);
 document.getElementById("filter").onchange=renderBody;
@@ -2178,7 +2185,7 @@ function setupPullToRefresh(scroller){
 }
 setupPullToRefresh(document.getElementById("matrixscroll"));
 setupPullToRefresh(document.getElementById("calscroll"));
-renderHead(); calAnchor=calDefaultAnchor(); updateTabbarH();
+renderHead(); calAnchor=calDefaultAnchor(); updateAppH(); updateTabbarH();
 hankakuizeAll();
 syncAllPhase5();
 // 共有接続：保存済みURLがあれば、サンプル(ダミー)を描かずに読み込み完了後に初描画する
