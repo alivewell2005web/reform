@@ -21,7 +21,8 @@
   --radius:8px;
 }
 *{box-sizing:border-box;}
-body{margin:0; padding:16px; background:var(--bg); color:var(--text-primary); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; font-size:14px;}
+html,body{height:100%;}
+body{margin:0; padding:0; background:var(--bg); color:var(--text-primary); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; font-size:14px; overflow:hidden;}
 button{background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:var(--radius); padding:6px 12px; cursor:pointer; color:var(--text-primary); font-family:inherit;}
 button:hover{background:var(--surface-3);}
 select,input[type=text],input[type=date]{background:var(--surface-2); border:0.5px solid var(--border-strong); border-radius:var(--radius); padding:6px 10px; color:var(--text-primary); font-family:inherit; width:100%;}
@@ -32,7 +33,7 @@ table{background:var(--surface-2);}
 .tabbtn{background:transparent;}
 .gearitem:hover{background:var(--surface-1);}
 .viewbtn{background:transparent;}
-#app{max-width:1200px; margin:0 auto;}
+#app{max-width:1200px; margin:0 auto; height:100%; display:flex; flex-direction:column; padding:16px 16px 0; overflow:hidden;}
 @media (max-width:640px), (pointer:coarse){
   /* タッチ端末ではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
   #calgrid{ touch-action:pan-x pan-y pinch-zoom !important; }
@@ -46,7 +47,7 @@ table{background:var(--surface-2);}
 <div style="padding:0.5rem 0;">
 <h2 class="sr-only">リフォーム進捗 部屋番号・本日色・週表示・未選択強調</h2>
 
-<div id="tabbar" style="display:flex; gap:8px; align-items:center; margin-bottom:1rem; position:sticky; top:0; z-index:100; background:var(--bg); padding:16px 0 8px; margin-top:-16px;">
+<div id="tabbar" style="display:flex; gap:8px; align-items:center; margin-bottom:1rem; flex:0 0 auto; background:var(--bg); padding-top:4px;">
   <button class="tabbtn" data-tab="matrix" style="flex:1; border:1px solid var(--text-accent); border-radius:10px; padding:12px 16px; font-weight:700; font-size:15px; background:var(--text-accent); color:#fff;">工事進捗管理表</button>
   <button class="tabbtn" data-tab="calendar" style="flex:1; border:1px solid var(--border-strong); border-radius:10px; padding:12px 16px; font-weight:700; font-size:15px; background:var(--surface-2); color:var(--text-secondary);">工事カレンダー</button>
   <div style="position:relative; flex:0 0 auto;">
@@ -64,8 +65,8 @@ table{background:var(--surface-2);}
   </div>
 </div>
 
-<div id="tab-matrix">
-  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.8rem;">
+<div id="tab-matrix" style="flex:1 1 auto; display:flex; flex-direction:column; min-height:0;">
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.8rem; flex:0 0 auto;">
     <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px;">
     <select id="filter" style="width:auto; min-width:130px;"><option value="incomplete">未完了のみ</option><option value="all">すべて表示</option></select>
     <span style="font-size:12px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;">並べ替え：
@@ -77,14 +78,14 @@ table{background:var(--surface-2);}
     <button id="clearfilters" style="display:none; font-size:12px; padding:3px 10px; align-items:center; gap:4px; color:var(--text-danger);"><i class="ti ti-filter-off" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> フィルター解除</button>
     <button id="addbtn" style="margin-left:auto;"><i class="ti ti-plus" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 新規現場</button>
   </div>
-  <div id="matrixscroll" style="overflow:auto; max-height:calc(100vh - var(--tabbar-h) - 24px); border:0.5px solid var(--border); border-radius:12px; -webkit-overflow-scrolling:touch;">
+  <div id="matrixscroll" style="flex:1 1 auto; min-height:0; overflow:auto; border:0.5px solid var(--border); border-radius:12px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; margin-bottom:16px;">
     <table style="border-collapse:collapse; font-size:13px; min-width:1080px;"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
   </div>
   <div id="detail" style="margin-top:12px;"></div>
 </div>
 
-<div id="tab-calendar" style="display:none;">
-  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.7rem;">
+<div id="tab-calendar" style="display:none; flex:1 1 auto; flex-direction:column; min-height:0;">
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.7rem; flex:0 0 auto;">
     <select id="sitesel" style="width:auto; min-width:150px;"></select>
     <select id="worksel" style="width:auto; min-width:120px;"></select>
     <select id="vendorsel" style="width:auto; min-width:130px;"></select>
@@ -102,25 +103,27 @@ table{background:var(--surface-2);}
     <button id="zeroholbtn" style="display:none; font-size:13px;"><i class="ti ti-calendar-off" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> ZERO休み登録</button>
     <button id="pdfbtn" style="font-size:13px;"><i class="ti ti-file-type-pdf" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 業者向けPDF</button>
   </div>
-  <div id="unassigned" style="margin-bottom:10px; border:1px solid var(--border-strong); border-radius:10px; padding:10px 12px; background:var(--surface-1);"></div>
-  <div id="calwrap" style="position:relative;">
-    <div id="calgrid" style="position:relative; user-select:none;"></div>
-    <div id="spanpop" style="display:none; position:absolute; z-index:50; width:min(420px,92%); box-shadow:0 8px 28px rgba(0,0,0,.22);">
-      <div style="background:var(--surface-2); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px;">
-        <div id="spantitle" style="font-size:13px; font-weight:500; margin-bottom:10px;"></div>
-        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-          <div style="display:flex; align-items:center; gap:6px;"><span id="spanstart" style="font-size:13px;"></span><button id="spanstartbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-          <div style="display:flex; align-items:center; gap:6px;"><span id="spanend" style="font-size:13px;"></span><button id="spanendbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-          <div style="display:flex; align-items:center; gap:6px;"><span id="spanact" style="font-size:13px;"></span><button id="spanactbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-          <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">業者：<b id="spanvendor"></b></span><button id="spanvendorbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-          <button id="spanclose" style="font-size:12px; padding:3px 10px; margin-left:auto;">閉じる</button>
+  <div id="unassigned" style="margin-bottom:10px; border:1px solid var(--border-strong); border-radius:10px; padding:10px 12px; background:var(--surface-1); flex:0 0 auto;"></div>
+  <div id="calcolorpicker" style="display:none; margin-bottom:10px; flex:0 0 auto;"></div>
+  <div id="calscroll" style="flex:1 1 auto; min-height:0; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding-bottom:16px;">
+    <div id="calwrap" style="position:relative;">
+      <div id="calgrid" style="position:relative; user-select:none;"></div>
+      <div id="spanpop" style="display:none; position:absolute; z-index:50; width:min(420px,92%); box-shadow:0 8px 28px rgba(0,0,0,.22);">
+        <div style="background:var(--surface-2); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px;">
+          <div id="spantitle" style="font-size:13px; font-weight:500; margin-bottom:10px;"></div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+            <div style="display:flex; align-items:center; gap:6px;"><span id="spanstart" style="font-size:13px;"></span><button id="spanstartbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+            <div style="display:flex; align-items:center; gap:6px;"><span id="spanend" style="font-size:13px;"></span><button id="spanendbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+            <div style="display:flex; align-items:center; gap:6px;"><span id="spanact" style="font-size:13px;"></span><button id="spanactbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+            <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">業者：<b id="spanvendor"></b></span><button id="spanvendorbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
+            <button id="spanclose" style="font-size:12px; padding:3px 10px; margin-left:auto;">閉じる</button>
+          </div>
         </div>
       </div>
+      <div id="legend" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; margin-bottom:6px;"></div>
+      <div id="calhint" style="font-size:12px; color:var(--text-secondary);"></div>
     </div>
   </div>
-  <div id="calcolorpicker" style="display:none; margin-top:10px;"></div>
-  <div id="legend" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; margin-bottom:6px;"></div>
-  <div id="calhint" style="font-size:12px; color:var(--text-secondary);"></div>
 </div>
 </div>
 
@@ -2003,8 +2006,8 @@ document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   closeSpanEditor();
   document.querySelectorAll(".tabbtn").forEach(x=>{x.style.background="var(--surface-2)"; x.style.color="var(--text-secondary)"; x.style.borderColor="var(--border-strong)";});
   b.style.background="var(--text-accent)"; b.style.color="#fff"; b.style.borderColor="var(--text-accent)";
-  document.getElementById("tab-matrix").style.display=(t==="matrix")?"block":"none";
-  document.getElementById("tab-calendar").style.display=(t==="calendar")?"block":"none";
+  document.getElementById("tab-matrix").style.display=(t==="matrix")?"flex":"none";
+  document.getElementById("tab-calendar").style.display=(t==="calendar")?"flex":"none";
   if(t==="matrix") sizeMatrixScroll();
 }));
 function setView(v){ calView=v;
@@ -2041,9 +2044,8 @@ document.getElementById("prevw").onclick=()=>{closeSpanEditor(); shiftWeek(-1);}
 document.getElementById("nextw").onclick=()=>{closeSpanEditor(); shiftWeek(1);};
 // 画面幅変化でカレンダーのチップ折返し高さを再計算
 let __rzT=null;
-function updateTabbarH(){ const t=document.getElementById("tabbar"); if(t) document.documentElement.style.setProperty("--tabbar-h", t.offsetHeight+"px"); sizeMatrixScroll(); }
-function sizeMatrixScroll(){ const el=document.getElementById("matrixscroll"); if(!el) return; const top=el.getBoundingClientRect().top; const h=window.innerHeight-top-12; el.style.maxHeight=Math.max(240,h)+"px"; }
-window.addEventListener("scroll",()=>sizeMatrixScroll(),{passive:true});
+function updateTabbarH(){ const t=document.getElementById("tabbar"); if(t) document.documentElement.style.setProperty("--tabbar-h", t.offsetHeight+"px"); }
+function sizeMatrixScroll(){ /* flexレイアウトで高さ自動のため不要 */ }
 window.addEventListener("resize",()=>{ closeSpanEditor(); updateTabbarH(); clearTimeout(__rzT); __rzT=setTimeout(()=>{ try{ if(bootRendered) renderCalendar(); }catch(_){}}, 200); });
 // カレンダー内の横スクロールで帯がずれるため、スクロール開始時にポップアップを閉じる
 document.getElementById("calwrap").addEventListener("scroll",()=>closeSpanEditor(),true);
