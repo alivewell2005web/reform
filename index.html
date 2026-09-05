@@ -78,7 +78,7 @@ table{background:var(--surface-2);}
     <button id="clearfilters" style="display:none; font-size:12px; padding:3px 10px; align-items:center; gap:4px; color:var(--text-danger);"><i class="ti ti-filter-off" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> フィルター解除</button>
     <button id="addbtn" style="margin-left:auto;"><i class="ti ti-plus" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 新規現場</button>
   </div>
-  <div id="matrixscroll" style="flex:1 1 auto; min-height:0; overflow:auto; border:0.5px solid var(--border); border-radius:12px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; margin-bottom:16px;">
+  <div id="matrixscroll" style="flex:1 1 auto; min-height:0; overflow:auto; border:0.5px solid var(--border); border-radius:12px; overscroll-behavior:none; margin-bottom:16px;">
     <table style="border-collapse:collapse; font-size:13px; min-width:1080px;"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
   </div>
   <div id="detail" style="margin-top:12px;"></div>
@@ -105,7 +105,7 @@ table{background:var(--surface-2);}
   </div>
   <div id="unassigned" style="margin-bottom:10px; border:1px solid var(--border-strong); border-radius:10px; padding:10px 12px; background:var(--surface-1); flex:0 0 auto;"></div>
   <div id="calcolorpicker" style="display:none; margin-bottom:10px; flex:0 0 auto;"></div>
-  <div id="calscroll" style="flex:1 1 auto; min-height:0; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding-bottom:16px;">
+  <div id="calscroll" style="flex:1 1 auto; min-height:0; overflow:auto; overscroll-behavior:none; padding-bottom:16px;">
     <div id="calwrap" style="position:relative;">
       <div id="calgrid" style="position:relative; user-select:none;"></div>
       <div id="spanpop" style="display:none; position:absolute; z-index:50; width:min(420px,92%); box-shadow:0 8px 28px rgba(0,0,0,.22);">
@@ -2138,6 +2138,34 @@ function showBootEmpty(msg, emptySheet){
   const cg=document.getElementById("calgrid"); if(cg) cg.innerHTML=`<div style="padding:2rem; text-align:center; color:var(--text-muted);">${msg||"データを表示できません。"}</div>`;
   const ua=document.getElementById("unassigned"); if(ua) ua.innerHTML="";
 }
+// ── 引っ張って更新（PWAでブラウザ更新が使えない対策）──
+function setupPullToRefresh(scroller){
+  if(!scroller) return;
+  let startY=0, pulling=false, dist=0;
+  const THRESH=70;
+  const ind=document.createElement("div");
+  ind.style.cssText="position:absolute; left:0; right:0; top:0; text-align:center; font-size:12px; color:var(--text-secondary); pointer-events:none; transition:opacity .15s; opacity:0; z-index:40;";
+  ind.textContent="↓ 引っ張って更新";
+  const host=scroller.parentElement; // flexコンテナ（相対配置の親）
+  if(getComputedStyle(host).position==="static") host.style.position="relative";
+  host.appendChild(ind);
+  scroller.addEventListener("touchstart",(e)=>{ if(scroller.scrollTop<=0){ startY=e.touches[0].clientY; pulling=true; dist=0; } else pulling=false; },{passive:true});
+  scroller.addEventListener("touchmove",(e)=>{
+    if(!pulling) return;
+    dist=e.touches[0].clientY-startY;
+    if(dist>0){
+      ind.style.opacity="1";
+      ind.style.transform=`translateY(${Math.min(dist,90)-20}px)`;
+      ind.textContent = dist>THRESH ? "手を離すと更新" : "↓ 引っ張って更新";
+    }
+  },{passive:true});
+  scroller.addEventListener("touchend",()=>{
+    if(pulling && dist>THRESH){ ind.textContent="更新中…"; if(typeof doLoad==="function"){ try{ if(!dirty) cloudLoad(false); else doLoad(); }catch(_){ } } }
+    ind.style.opacity="0"; ind.style.transform=""; pulling=false; dist=0;
+  },{passive:true});
+}
+setupPullToRefresh(document.getElementById("matrixscroll"));
+setupPullToRefresh(document.getElementById("calscroll"));
 renderHead(); calAnchor=calDefaultAnchor(); updateTabbarH();
 hankakuizeAll();
 syncAllPhase5();
