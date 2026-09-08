@@ -33,7 +33,6 @@ table{background:var(--surface-2);}
 .c-amber{background:var(--bg-warning); color:var(--text-warning);}
 .tabbtn{background:transparent;}
 .gearitem:hover{background:var(--surface-1);}
-.viewbtn{background:transparent;}
 #app{max-width:1200px; margin:0 auto; height:100dvh; height:100%; display:flex; flex-direction:column; padding:16px 16px 0; overflow:hidden; min-height:0;}
 @media (max-width:640px), (pointer:coarse){
   /* タッチ端末ではカレンダーの縦スクロールを最優先（ドラッグ誤爆防止） */
@@ -94,10 +93,6 @@ table{background:var(--surface-2);}
     <select id="sitesel" style="width:auto; min-width:150px;"></select>
     <select id="worksel" style="width:auto; min-width:120px;"></select>
     <select id="vendorsel" style="width:auto; min-width:130px;"></select>
-    <div style="display:inline-flex; border:0.5px solid var(--border); border-radius:var(--radius); overflow:hidden;">
-      <button id="viewmonth" class="viewbtn" style="border:none; border-radius:0; padding:5px 14px; font-size:13px;">月</button>
-      <button id="viewweek" class="viewbtn" style="border:none; border-radius:0; padding:5px 14px; font-size:13px; color:var(--text-secondary);">週</button>
-    </div>
     <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
       <button id="prevp" aria-label="前月へ" title="前の月" style="padding:4px 8px;"><i class="ti ti-chevrons-left" aria-hidden="true"></i></button>
       <button id="prevw" aria-label="前週へ" title="1週前へ" style="padding:4px 8px; font-size:12px;"><i class="ti ti-chevron-left" aria-hidden="true"></i>週</button>
@@ -119,7 +114,6 @@ table{background:var(--surface-2);}
           <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
             <div style="display:flex; align-items:center; gap:6px;"><span id="spanstart" style="font-size:13px;"></span><button id="spanstartbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
             <div style="display:flex; align-items:center; gap:6px;"><span id="spanend" style="font-size:13px;"></span><button id="spanendbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
-            <div style="display:flex; align-items:center; gap:6px;"><span id="spanact" style="font-size:13px;"></span><button id="spanactbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
             <div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">業者：<b id="spanvendor"></b></span><button id="spanvendorbtn" style="font-size:12px; padding:2px 9px;">変更</button></div>
             <button id="spanclose" style="font-size:12px; padding:3px 10px; margin-left:auto;">閉じる</button>
           </div>
@@ -1272,13 +1266,11 @@ function openSpanEditor(s,w,anchorEl){
   document.getElementById("spantitle").textContent=`${w} — ${s.name} ${s.room}号室`;
   document.getElementById("spanstart").innerHTML=`開始：<b>${fmt(wk.start)||'—'}</b>`;
   document.getElementById("spanend").innerHTML=`完了予定：<b>${fmt(wk.end)||'—'}</b>`;
-  document.getElementById("spanact").innerHTML=`実績：<b>${fmt(wk.act)||'未'}</b>`;
   document.getElementById("spanvendor").textContent=wk.vendor||"未設定";
   wrap.style.display="block";
   positionSpanPop(wrap,_lastSpanAnchor);
   document.getElementById("spanstartbtn").onclick=(ev)=>editSpanDate(s,w,"start",ev.currentTarget,()=>openSpanEditor(s,w));
   document.getElementById("spanendbtn").onclick=(ev)=>editSpanDate(s,w,"end",ev.currentTarget,()=>openSpanEditor(s,w));
-  document.getElementById("spanactbtn").onclick=(ev)=>openDateInline(ev.currentTarget,wk.act,v=>{wk.act=v; syncAndRefresh(s); openSpanEditor(s,w);});
   document.getElementById("spanvendorbtn").onclick=()=>{
     const cur=wk.vendor||""; const v=prompt("業者名（空欄で未設定）\n登録済み: "+vendorMaster.join(" / "), cur);
     if(v!==null){ const nv=v.trim(); wk.vendor=nv||null; if(nv&&!vendorMaster.includes(nv))vendorMaster.push(nv); refresh(); openSpanEditor(s,w); }
@@ -2015,17 +2007,6 @@ document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   document.getElementById("tab-calendar").style.display=(t==="calendar")?"flex":"none";
   if(t==="matrix") sizeMatrixScroll();
 }));
-function setView(v){ calView=v;
-  if(v==="week"){ weekFromToday=true; calAnchor=new Date(TODAY); }
-  else { calAnchor=calDefaultAnchor(); }
-  document.getElementById("viewmonth").style.color=v==="month"?"var(--text-primary)":"var(--text-secondary)";
-  document.getElementById("viewmonth").style.background=v==="month"?"var(--surface-3)":"transparent";
-  document.getElementById("viewweek").style.color=v==="week"?"var(--text-primary)":"var(--text-secondary)";
-  document.getElementById("viewweek").style.background=v==="week"?"var(--surface-3)":"transparent";
-  renderCalendar();
-}
-document.getElementById("viewmonth").onclick=()=>{closeSpanEditor(); setView("month");};
-document.getElementById("viewweek").onclick=()=>{closeSpanEditor(); setView("week");};
 document.getElementById("sitesel").addEventListener("change",e=>{closeSpanEditor(); calSite=e.target.value; renderCalendar();});
 document.getElementById("worksel").addEventListener("change",e=>{closeSpanEditor(); calWork=e.target.value; renderCalendar();});
 document.getElementById("vendorsel").addEventListener("change",e=>{closeSpanEditor(); calVendor=e.target.value; renderCalendar();});
