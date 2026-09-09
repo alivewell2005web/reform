@@ -1111,7 +1111,7 @@ function renderCalendarLanes(spans, days, groupBySite){
   });
 
   const grid=document.getElementById("calgrid");
-  if(scrollX){ grid.innerHTML=`<div style="overflow-x:auto; -webkit-overflow-scrolling:touch;"><div style="min-width:${innerMinPx}px;">${headRow}${weeksHtml}</div></div>`; } else { grid.innerHTML=headRow+weeksHtml; }
+  if(scrollX){ grid.innerHTML=`<div style="min-width:${innerMinPx}px;">${headRow}${weeksHtml}</div>`; } else { grid.innerHTML=headRow+weeksHtml; }
   wireCalendar(grid);
 }
 
