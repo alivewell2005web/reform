@@ -190,6 +190,7 @@ function newSite(id,name,room,category){return {id,name,room,category:category||
   mtgTime:null,                        // 退去立会の開始時刻（hh:mm）
   mtgEndTime:null,                     // 退去立会の終了時刻（hh:mm、幅がある場合のみ）
   attendee:null,                       // 立会者（鵜飼/野間元/秀島/西谷/森/現調）
+  survey:false,                        // 現調フラグ（trueなら進捗表で時刻の代わりに「現調」表示）
   moveinClean:{order:null,done:null},  // 入居前清掃（発注/実施）
   keyChange:{order:null,done:null},    // 鍵交換（発注/実施）
   billTo:"デザイン",     // 請求先（デザイン/ウエル/レジデンシャル）
@@ -203,21 +204,8 @@ const AUTOLOCK_PRESETS=["呼5100","※1234呼"];   // 加えてフリー入力�
 const NOTE_PRESETS=["当社","オープン","電気メーター","水道メーター","南京5100"]; // 加えてフリー入力（空欄デフォルト）
 // ZERO（クリーニング業者）の休業日。日付キー("YYYY-MM-DD")のSet。現場名/ZERO/アルファ&ZERO 絞り込み時にカレンダー表示。
 let zeroHolidays=new Set();
-let sites=[
-  Object.assign(newSite(1,"パークアクシスうつぼ公園","803","三井"),{plan:["2026-08-05","2026-08-07","2026-08-10","2026-08-12","2026-08-20","2026-08-28"],act:["2026-08-01","2026-08-03","2026-08-05",null,null,null],
-    mtgTime:"10:00",billTo:"デザイン",furniture:"なし",autolock:"呼5100",note:"当社",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-15",done:"2026-08-17"},
-    works:{"リフォーム":{start:"2026-08-06",end:"2026-08-08",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-10",act:null,vendor:"ZERO",cleanFee:38000,acFee:12000,peelFee:0},"設備交換":{items:[{name:"浴室乾燥機",plan:null,act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-12",act:null,vendor:"ｼｬﾑｽ"},"設備廃棄":{plan:"2026-08-06",act:null,vendor:"ｶﾞﾘﾊﾞｰ"}}}),
-  Object.assign(newSite(2,"パークキューブ北浜","1205","三井"),{plan:["2026-08-06","2026-08-08","2026-08-11","2026-08-25","2026-08-24","2026-08-31"],act:["2026-08-15","2026-08-18","2026-08-19",null,null,null],
-    mtgTime:"13:30",billTo:"ウエル",furniture:"あり",autolock:"※1234呼",note:"オープン",moveinClean:{order:null,done:null},keyChange:{order:"2026-08-19",done:"2026-08-27"},
-    works:{"リフォーム":{start:"2026-08-20",end:"2026-08-22",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-24",act:null,vendor:"ZERO",cleanFee:45000,acFee:24000,peelFee:15000},"設備交換":{items:[{name:"給湯器交換",plan:"2026-08-20",act:null,vendor:"大松"},{name:"レンジフード交換",plan:"2026-08-21",act:null,vendor:"大松"}]},"リペア":{plan:"2026-08-25",act:null,vendor:"ｼｬﾑｽ"},"畳・ふすま":{plan:"2026-08-21",act:null,vendor:"森上"}}}),
-  Object.assign(newSite(3,"西天満レジデンス","305","三井"),{plan:["2026-08-04","2026-08-06","2026-08-08","2026-08-19","2026-08-26","2026-08-31"],act:["2026-08-08","2026-08-10","2026-08-12",null,null,null],
-    mtgTime:"09:00",billTo:"レジデンシャル",furniture:"なし",autolock:"",note:"",moveinClean:{order:"2026-08-24",done:"2026-08-28"},keyChange:{order:"2026-08-24",done:null},
-    works:{"リフォーム":{start:"2026-08-13",end:"2026-08-17",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-18",act:null,vendor:"ZERO",cleanFee:40000,acFee:12000,peelFee:0},"リペア":{plan:"2026-08-19",act:null,vendor:"ｼｬﾑｽ"},"畳・ふすま":{plan:"2026-08-13",act:null,vendor:"森上"},"設備廃棄":{plan:"2026-08-14",act:null,vendor:"ｶﾞﾘﾊﾞｰ"}}}),
-  Object.assign(newSite(4,"ﾌｧｰｽﾄｽﾃｰｼﾞ江坂広芝町Ⅱ","301","自社"),{plan:[null,null,null,"2026-08-28",null,null],act:["2026-08-23",null,null,null,null,null],
-    mtgTime:"16:00",billTo:"デザイン",furniture:"なし",autolock:"",note:"",moveinClean:{order:null,done:null},keyChange:{order:null,done:null},
-    works:{"リフォーム":{start:"2026-08-25",end:"2026-08-27",act:null,vendor:"ｱﾙﾌｧ"},"クリーニング":{plan:"2026-08-28",act:null,vendor:"ZERO"}}}),
-];
-let nextId=5;
+let sites=[];
+let nextId=1;
 let calAnchor=new Date(TODAY);
 let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
 let sortKey="created"; // created(登録順) | phase | name | date1
@@ -374,9 +362,12 @@ function cellHtml(s,i){
     const bg0 = act ? 'background:var(--bg-success);' : '';
     const timeStr = mtgTimeLabel(s);
     const att = s.attendee || '';
+    const timeCell = s.survey
+      ? `<span style="color:var(--text-accent); font-weight:500;"><i class="ti ti-ruler-measure" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> 現調</span>`
+      : (timeStr?`<span style="color:var(--text-secondary);"><i class="ti ti-clock" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${timeStr}</span>`:'<span style="color:var(--text-muted);">時刻</span>');
     return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); ${bg0}">
       <div data-edit="${s.id}:0:act" style="cursor:pointer; font-size:13px;">${act?`<span style="color:var(--text-success); font-weight:500;">${act}</span>`:'<span style="color:var(--text-muted);">未定</span>'}</div>
-      <div data-mtgtime="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${timeStr?`<span style="color:var(--text-secondary);"><i class="ti ti-clock" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${timeStr}</span>`:'<span style="color:var(--text-muted);">時刻</span>'}</div>
+      <div data-mtgtime="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${timeCell}</div>
       <div data-attendee="${s.id}" style="cursor:pointer; margin-top:2px; font-size:12px;">${att?`<span style="color:var(--text-secondary);"><i class="ti ti-user" aria-hidden="true" style="font-size:10px; vertical-align:-1px;"></i> ${att}</span>`:'<span style="color:var(--text-muted);">立会者</span>'}</div></td>`;
   }
   // ⑤(i=4) 完了チェック：単日。工事最終日より前なら警告背景
@@ -493,9 +484,9 @@ function renderBody(){
   tb.querySelectorAll("[data-siteedit]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); openEditSiteModal(Number(el.dataset.siteedit));}));
   tb.querySelectorAll("[data-sitedel]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); const id=Number(el.dataset.sitedel); const s=sites.find(x=>x.id===id); if(!s)return; if(confirm(`「${s.name} ${s.room}号室」を削除します。工事内訳や金額など、この現場の全データが消えます。よろしいですか？`)){ sites=sites.filter(x=>x.id!==id); refresh(); }}));
   tb.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>{const [id,idx,kind]=el.dataset.edit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return; const i=Number(idx);
-    if(i===0){ openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh();},s.mtgEndTime,s.attendee); return; }
+    if(i===0){ openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av,sv)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; s.survey=sv; refresh();},s.mtgEndTime,s.attendee,s.survey); return; }
     openDateInline(el,s[kind][i],(v)=>{s[kind][i]=v; refresh();});}));
-  const openMtg=(s,el)=>openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh();},s.mtgEndTime,s.attendee);
+  const openMtg=(s,el)=>openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av,sv)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; s.survey=sv; refresh();},s.mtgEndTime,s.attendee,s.survey);
   tb.querySelectorAll("[data-mtgtime]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.mtgtime)); if(s)openMtg(s,el);}));
   tb.querySelectorAll("[data-attendee]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.attendee)); if(s)openMtg(s,el);}));
   tb.querySelectorAll("textarea[data-memo]").forEach(el=>el.addEventListener("input",()=>{const s=sites.find(x=>x.id===Number(el.dataset.memo)); if(s){s.memo=el.value; dirty=true; scheduleAutoSave();}}));
@@ -1133,7 +1124,7 @@ function wireCalendar(grid){
     if(e.kind==="mtg"){
       el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"mtg",id:e.site.id,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
         const s=sites.find(x=>x.id===e.site.id); closeSpanEditor();
-        openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av)=>{ s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; refresh(); },s.mtgEndTime,s.attendee);
+        openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av,sv)=>{ s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; s.survey=sv; refresh(); },s.mtgEndTime,s.attendee,s.survey);
       }}); });
       return;
     }
@@ -1324,14 +1315,14 @@ function timeOptionsHtmlId(prefix,cur){
   return `${h}<span style="align-self:center;">:</span>${m}`;
 }
 // 日付＋時刻(開始/終了)＋立会者を編集する小ポップアップ（退去立会用）
-function openDateTimeInline(anchorEl,curDate,curTime,cb,curEndTime,curAttendee){
+function openDateTimeInline(anchorEl,curDate,curTime,cb,curEndTime,curAttendee,curSurvey){
   const old=document.getElementById("inlinedt"); if(old) old.remove();
   const box=document.createElement("div");
   box.id="inlinedt";
   box.style.cssText="position:fixed; z-index:10000; display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); box-shadow:0 4px 14px rgba(0,0,0,.15);";
   const attOpts=`<option value="">--</option>`+ATTENDEES.map(a=>`<option value="${a}"${a===(curAttendee||'')?' selected':''}>${a}</option>`).join("");
   box.innerHTML=`<label style="font-size:11px; color:var(--text-secondary);">日付<br><input type="date" id="dtd" value="${curDate||''}" style="width:170px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;"></label>
-    <div style="font-size:11px; color:var(--text-secondary);">開始時刻<br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtmlId("dts",curTime)}</div></div>
+    <div style="font-size:11px; color:var(--text-secondary);">開始時刻<br><div style="display:flex; gap:8px; align-items:center; margin-top:2px;"><div style="display:flex; gap:4px;">${timeOptionsHtmlId("dts",curTime)}</div><label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--text-primary); white-space:nowrap; cursor:pointer;"><input type="checkbox" id="dtsurvey"${curSurvey?' checked':''} style="width:auto; margin:0;">現調</label></div></div>
     <div style="font-size:11px; color:var(--text-secondary);">終了時刻<span style="color:var(--text-muted);">（幅がある場合のみ）</span><br><div style="display:flex; gap:4px; margin-top:2px;">${timeOptionsHtmlId("dte",curEndTime)}</div></div>
     <label style="font-size:11px; color:var(--text-secondary);">立会者<br><select id="dtatt" style="width:170px; box-sizing:border-box; font-size:13px; padding:3px 6px; margin-top:2px;">${attOpts}</select></label>
     <div style="display:flex; gap:6px; justify-content:flex-end;"><button id="dtok" style="font-size:12px; padding:3px 12px;">確定</button></div>`;
@@ -1351,7 +1342,8 @@ function openDateTimeInline(anchorEl,curDate,curTime,cb,curEndTime,curAttendee){
     if(ev && !tv) ev=null;                    // 開始が無いのに終了だけは無効
     if(ev && tv && ev<=tv) ev=null;           // 終了≦開始は幅なし扱い
     const av=box.querySelector("#dtatt").value||null;
-    box.remove(); document.removeEventListener("pointerdown",outside,true); cb(dv,tv,ev,av); };
+    const sv=box.querySelector("#dtsurvey").checked;
+    box.remove(); document.removeEventListener("pointerdown",outside,true); cb(dv,tv,ev,av,sv); };
   const cancel=()=>{ if(done)return; done=true; box.remove(); document.removeEventListener("pointerdown",outside,true); };
   const outside=(e)=>{ if(!box.contains(e.target)) finish(); };
   box.querySelector("#dtok").addEventListener("click",finish);
@@ -1440,6 +1432,7 @@ function normalizeSite(raw){
   if(!s.keyChange||typeof s.keyChange!=="object") s.keyChange={order:null,done:null};
   if(s.mtgEndTime===undefined) s.mtgEndTime=null;
   if(s.attendee===undefined) s.attendee=null;
+  if(s.survey===undefined) s.survey=false;
   if(s.memo===undefined) s.memo="";
   return s;
 }
@@ -2213,7 +2206,7 @@ if(GAS_URL){
 } else {
   dataLoaded=true; // ローカル試用（未接続）は保存可
   bootRender();
-  setSyncStatus("未接続：サンプル表示中。「接続設定」でURLを設定すると共有できます。");
+  setSyncStatus("未接続：この端末のみの表示です（データは共有されません）。「接続設定」でURLを設定すると共有できます。");
 }
 </script>
 
