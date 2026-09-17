@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v77</title>
+<title>リフォーム進捗管理アプリ v78</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -41,10 +41,6 @@ table{background:var(--surface-2);}
   /* スクロールコンテナのタッチスクロールを保証。内部の touch-action:none がスクロールを殺すのを打ち消す */
   #matrixscroll, #calscroll{ -webkit-overflow-scrolling:touch; overscroll-behavior:contain !important; }
   #matrixscroll, #matrixscroll *, #calscroll{ touch-action:pan-x pan-y pinch-zoom !important; }
-  /* スマホでは左3列固定を解除：sticky固定が横スクロールを吸ってしまう挙動を回避 */
-  #matrixscroll .stickycol{ position:static !important; left:auto !important; z-index:auto !important; }
-  /* ヘッダー行の上固定は維持（縦スクロール時の見出し） */
-  #matrixscroll thead .stickycol{ position:sticky !important; top:0 !important; left:auto !important; z-index:3 !important; }
   #unassignedbtns .pill{ touch-action:pan-x pan-y !important; }
 }
 </style>
