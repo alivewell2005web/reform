@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v71</title>
+<title>リフォーム進捗管理アプリ v72</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -39,7 +39,7 @@ table{background:var(--surface-2);}
   #calgrid{ touch-action:pan-x pan-y pinch-zoom !important; }
   #calgrid .chip, #calgrid .xchip, #calgrid .span, #calgrid .pill{ touch-action:pan-x pan-y pinch-zoom !important; cursor:pointer !important; }
   /* スクロールコンテナのタッチスクロールを保証。内部の touch-action:none がスクロールを殺すのを打ち消す */
-  #matrixscroll, #calscroll{ -webkit-overflow-scrolling:auto; overscroll-behavior:contain !important; }
+  #matrixscroll, #calscroll{ -webkit-overflow-scrolling:touch; overscroll-behavior:contain !important; }
   #matrixscroll, #matrixscroll *, #calscroll{ touch-action:pan-x pan-y pinch-zoom !important; }
   #unassignedbtns .pill{ touch-action:pan-x pan-y !important; }
 }
@@ -212,6 +212,7 @@ let nextId=1;
 let calAnchor=new Date(TODAY);
 let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
 let sortKey="created"; // created(登録順) | phase | name | date1
+let sortAsc=true; // 昇順=true / 降順=false
 // 列フィルター状態。null＝無効。
 // name/status/vendorはSet、phaseRange[i]は各工程i(0-5)の日付範囲{from,to}、moveinRange/keyRangeは入居前清掃/鍵交換の実施日範囲
 let colFilters={ name:null, status:null, vendor:null, category:null,
@@ -462,9 +463,12 @@ function renderBody(){
   else if(sortKey==="date1") rows.sort((a,b)=>(a.act[0]||a.plan[0]||"9999").localeCompare(b.act[0]||b.plan[0]||"9999"));
   else if(sortKey==="phase") rows.sort((a,b)=>currentPhase(a)-currentPhase(b));
   else rows.sort((a,b)=>a.id-b.id); // created（既定＝登録順）
-  // ソートボタンのアクティブ表示
+  if(!sortAsc) rows.reverse();
+  // ソートボタンのアクティブ表示（選択中は昇順/降順の矢印つき）
   document.querySelectorAll(".sortbtn").forEach(b=>{ const on=b.dataset.sort===sortKey;
-    b.style.background=on?"var(--text-accent)":"var(--surface-2)"; b.style.color=on?"#fff":"var(--text-primary)"; b.style.fontWeight=on?"600":"400"; });
+    b.style.background=on?"var(--text-accent)":"var(--surface-2)"; b.style.color=on?"#fff":"var(--text-primary)"; b.style.fontWeight=on?"600":"400";
+    const base=b.dataset.label||(b.dataset.label=b.textContent.trim());
+    b.textContent = on ? base+(sortAsc?" ↑":" ↓") : base; });
   const tb=document.getElementById("tbody");
   if(rows.length===0){tb.innerHTML=`<tr><td colspan="14" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; renderDetail(sites.find(s=>s.open)||null); updateFilterClearBtn(); return;}
   tb.innerHTML=rows.map(s=>{
@@ -2054,7 +2058,7 @@ document.getElementById("filter").onchange=renderBody;
   sc.addEventListener("click",()=>{ si.value=""; upd(); renderBody(); si.focus(); });
   upd();
 })();
-document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{ sortKey=b.dataset.sort; renderBody(); }));
+document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{ if(sortKey===b.dataset.sort){ sortAsc=!sortAsc; } else { sortKey=b.dataset.sort; sortAsc=true; } renderBody(); }));
 document.getElementById("clearfilters").addEventListener("click",clearAllColFilters);
 document.getElementById("btnSettings").addEventListener("click",openSettings);
 document.getElementById("btnLoad").addEventListener("click",doLoad);
