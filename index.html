@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v70</title>
+<title>リフォーム進捗管理アプリ v71</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -40,7 +40,7 @@ table{background:var(--surface-2);}
   #calgrid .chip, #calgrid .xchip, #calgrid .span, #calgrid .pill{ touch-action:pan-x pan-y pinch-zoom !important; cursor:pointer !important; }
   /* スクロールコンテナのタッチスクロールを保証。内部の touch-action:none がスクロールを殺すのを打ち消す */
   #matrixscroll, #calscroll{ -webkit-overflow-scrolling:auto; overscroll-behavior:contain !important; }
-  #matrixscroll, #matrixscroll *, #calscroll{ touch-action:pan-x pan-y !important; }
+  #matrixscroll, #matrixscroll *, #calscroll{ touch-action:pan-x pan-y pinch-zoom !important; }
   #unassignedbtns .pill{ touch-action:pan-x pan-y !important; }
 }
 </style>
@@ -70,8 +70,11 @@ table{background:var(--surface-2);}
 </div>
 
 <div id="tab-matrix" style="flex:1 1 auto; display:flex; flex-direction:column; min-height:0;">
-  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.8rem; flex:0 0 auto;">
-    <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px;">
+  <div style="display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; margin-bottom:0.8rem; flex:0 0 auto;">
+    <span style="position:relative; display:inline-flex; align-items:center;">
+      <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px; font-size:16px; padding-right:30px;">
+      <button id="searchclear" type="button" aria-label="検索をクリア" style="display:none; position:absolute; right:6px; top:50%; transform:translateY(-50%); border:none; background:var(--surface-2); color:var(--text-muted); width:20px; height:20px; border-radius:50%; padding:0; line-height:1; cursor:pointer; align-items:center; justify-content:center;"><i class="ti ti-x" aria-hidden="true" style="font-size:13px; vertical-align:-1px;"></i></button>
+    </span>
     <span style="display:inline-flex; flex-direction:column; gap:1px;"><select id="filter" style="width:auto; min-width:130px;"><option value="incomplete">対応中</option><option value="all">すべて表示</option></select><span style="font-size:10px; color:var(--text-muted); white-space:nowrap;">対応中＝未完了＆当月完了分</span></span>
     <span style="font-size:12px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;">並べ替え：
       <button class="sortbtn" data-sort="created" style="font-size:12px; padding:3px 10px;">登録順</button>
@@ -2044,7 +2047,13 @@ if(window.visualViewport){ window.visualViewport.addEventListener("resize", upda
 // カレンダー内の横スクロールで帯がずれるため、スクロール開始時にポップアップを閉じる
 document.getElementById("calwrap").addEventListener("scroll",()=>closeSpanEditor(),true);
 document.getElementById("filter").onchange=renderBody;
-document.getElementById("search").addEventListener("input",renderBody);
+(function(){
+  const si=document.getElementById("search"), sc=document.getElementById("searchclear");
+  const upd=()=>{ sc.style.display = si.value ? "inline-flex" : "none"; };
+  si.addEventListener("input",()=>{ upd(); renderBody(); });
+  sc.addEventListener("click",()=>{ si.value=""; upd(); renderBody(); si.focus(); });
+  upd();
+})();
 document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{ sortKey=b.dataset.sort; renderBody(); }));
 document.getElementById("clearfilters").addEventListener("click",clearAllColFilters);
 document.getElementById("btnSettings").addEventListener("click",openSettings);
