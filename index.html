@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v68</title>
+<title>リフォーム進捗管理アプリ v70</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -72,7 +72,7 @@ table{background:var(--surface-2);}
 <div id="tab-matrix" style="flex:1 1 auto; display:flex; flex-direction:column; min-height:0;">
   <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:0.8rem; flex:0 0 auto;">
     <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px;">
-    <select id="filter" style="width:auto; min-width:130px;"><option value="incomplete">未完了のみ</option><option value="all">すべて表示</option></select>
+    <span style="display:inline-flex; flex-direction:column; gap:1px;"><select id="filter" style="width:auto; min-width:130px;"><option value="incomplete">対応中</option><option value="all">すべて表示</option></select><span style="font-size:10px; color:var(--text-muted); white-space:nowrap;">対応中＝未完了＆当月完了分</span></span>
     <span style="font-size:12px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;">並べ替え：
       <button class="sortbtn" data-sort="created" style="font-size:12px; padding:3px 10px;">登録順</button>
       <button class="sortbtn" data-sort="phase" style="font-size:12px; padding:3px 10px;">現在地</button>
@@ -230,11 +230,23 @@ function activePhases(s){ return s.category==="自社" ? [0,3,4] : [0,1,2,3,4,5]
 function isPhaseActive(s,i){ return activePhases(s).includes(i); }
 // 区分ごとに入居前清掃・鍵交換を使うか（自社は使わない）
 function usesExtra(s){ return s.category!=="自社"; }
-// 現場が完了扱いか。三井：全6工程＋鍵交換実施。自社：⑤完了チェック実績。
+// 実施日が今日以前（到来済み）か
+function dateReached(d){ if(!d) return false; const t=parseISO(d); if(!t) return false; const now=new Date(); now.setHours(0,0,0,0); return t.getTime()<=now.getTime(); }
+// 現場が完了扱いか。三井：全6工程＋鍵交換実施（実施日到来まで完了にしない）。自社：⑤完了チェック実績。
 function isComplete(s){
   if(s.category==="自社") return !!s.act[4];
-  return currentPhase(s)>=NPHASE && !!(s.keyChange && s.keyChange.done);
+  return currentPhase(s)>=NPHASE && !!(s.keyChange && s.keyChange.done) && dateReached(s.keyChange.done);
 }
+// 完了日が当月中か（当月末までは対応中に残す判定用）
+function completedThisMonth(s){
+  const d = s.category==="自社" ? s.act[4] : (s.keyChange && s.keyChange.done);
+  if(!d) return false;
+  const t=parseISO(d); if(!t) return false;
+  const now=new Date();
+  return t.getFullYear()===now.getFullYear() && t.getMonth()===now.getMonth();
+}
+// 「対応中」フィルタに残すか＝未完了、または完了でも実施日が当月中
+function isActive(s){ return !isComplete(s) || completedThisMonth(s); }
 // 立会時刻の表示（開始のみ or 開始〜終了）
 function mtgTimeLabel(s){ if(!s.mtgTime) return ''; return s.mtgEndTime ? `${s.mtgTime}〜${s.mtgEndTime}` : s.mtgTime; }
 function fmt(d){if(!d)return null;const p=d.split("-");return `${parseInt(p[1])}/${parseInt(p[2])}`;}
@@ -436,14 +448,14 @@ function renderBody(){
   const f=document.getElementById("filter").value;
   const q=(document.getElementById("search").value||"").trim().toLowerCase();
   let rows=sites.slice();
-  if(f==="incomplete") rows=rows.filter(s=>!isComplete(s));
+  if(f==="incomplete") rows=rows.filter(s=>isActive(s));
   if(q){ rows=rows.filter(s=>{
     const hay=[s.name,s.room,s.name+" "+s.room+"号室",...siteVendors(s)].join(" ").toLowerCase();
     return hay.includes(q);
   }); }
   rows=rows.filter(passColFilters);
   // 並べ替え（切替式）
-  if(sortKey==="name") rows.sort((a,b)=>(a.name+a.room).localeCompare(b.name+b.room,"ja"));
+  if(sortKey==="name") rows.sort((a,b)=>{ const n=a.name.localeCompare(b.name,"ja"); if(n!==0) return n; return (a.act[0]||a.plan[0]||"9999").localeCompare(b.act[0]||b.plan[0]||"9999"); });
   else if(sortKey==="date1") rows.sort((a,b)=>(a.act[0]||a.plan[0]||"9999").localeCompare(b.act[0]||b.plan[0]||"9999"));
   else if(sortKey==="phase") rows.sort((a,b)=>currentPhase(a)-currentPhase(b));
   else rows.sort((a,b)=>a.id-b.id); // created（既定＝登録順）
@@ -2098,7 +2110,11 @@ function openSiteModal(editSite){
     // 手入力した新しい物件名はマスタに自動登録
     if(sel.value==="__free__" && name && !buildingMaster.includes(name)) buildingMaster.push(name);
     if(isEdit){ editSite.name=name; editSite.room=room; editSite.category=c; }
-    else { sites.push(newSite(nextId++,name,room,c)); }
+    else {
+      const dup=sites.some(x=>x.name===name && String(x.room).trim()===room);
+      if(dup && !confirm("すでに同じ号室の登録がありますが登録してよろしいですか？")) return;
+      sites.push(newSite(nextId++,name,room,c));
+    }
     close(); refresh();
   };
   ov.addEventListener("keydown",e=>{ if(e.key==="Escape")close(); });
