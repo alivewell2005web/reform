@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v80</title>
+<title>リフォーム進捗管理アプリ v81</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -1469,8 +1469,13 @@ function syncAndRefresh(s){ syncPhase5(s); refresh(); }
 // 保存形式：複雑な部分(works等)を含む現場データをJSONにまとめ、Apps Script経由で
 // スプレッドシートのセルに読み書きする。URLは設定欄に貼る（下のGAS_URL）。
 const SCHEMA_VERSION=1;
-let GAS_URL=""; // Apps ScriptのウェブアプリURL（設定欄で入力）
-let GAS_TOKEN=""; // 合言葉（Apps Script側のTOKENと一致させる）
+// ===== 接続先の埋め込み（Cloudflare Workers）=====
+// ここにWorkerのURLと合言葉を書いておくと、各端末での接続設定入力が不要になる。
+// 空文字のままにすると従来どおり「接続設定」画面からの入力方式になる。
+const EMBED_URL="https://reform-store.alivewell2005web.workers.dev";   // 例: https://reform-store.xxxx.workers.dev
+const EMBED_TOKEN="design1101";      // 合言葉（Worker側TOKENと一致させる）
+let GAS_URL=""; // 接続先URL（下の起動処理でEMBED_URL優先で設定）
+let GAS_TOKEN=""; // 合言葉
 let lastUpdatedAt=""; // シート側の最終更新時刻（競合検知用）
 let autoSaveTimer=null;
 let saving=false, pendingSave=false;
@@ -1651,10 +1656,10 @@ function openSettings(){
   ov.id="settingsmodal";
   ov.style.cssText="position:fixed; inset:0; z-index:11000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
   ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:20px; width:460px; max-width:94vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
-    <div style="font-size:15px; font-weight:600; margin-bottom:12px;">共有（Googleスプレッドシート）接続設定</div>
-    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:6px;">Apps ScriptのウェブアプリURL</label>
-    <input type="text" id="gasUrlInput" value="${GAS_URL.replace(/"/g,'&quot;')}" placeholder="https://script.google.com/macros/s/..../exec" style="width:100%; box-sizing:border-box; font-size:13px; padding:7px 9px; margin-bottom:12px;">
-    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:6px;">合言葉（Apps Script側のTOKENと同じ値）</label>
+    <div style="font-size:15px; font-weight:600; margin-bottom:12px;">共有（Cloudflare）接続設定</div>
+    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:6px;">接続先URL（Cloudflare Worker）</label>
+    <input type="text" id="gasUrlInput" value="${GAS_URL.replace(/"/g,'&quot;')}" placeholder="https://reform-store.xxxx.workers.dev" style="width:100%; box-sizing:border-box; font-size:13px; padding:7px 9px; margin-bottom:12px;">
+    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:6px;">合言葉（Worker側のTOKENと同じ値）</label>
     <input type="text" id="gasTokenInput" value="${GAS_TOKEN.replace(/"/g,'&quot;')}" placeholder="例: arise-reform-8347-xyz" style="width:100%; box-sizing:border-box; font-size:13px; padding:7px 9px; margin-bottom:6px;">
     <div style="font-size:11px; color:var(--text-muted); margin-bottom:16px;">URLと合言葉はこのブラウザに記憶されます。社内の各PCで一度だけ設定してください。<br>保存のたびにスプレッドシート内の「history」シートへ自動でバックアップが蓄積されます。</div>
     <div style="border-top:0.5px solid var(--border); padding-top:14px; margin-bottom:14px;">
@@ -2286,7 +2291,13 @@ renderHead(); calAnchor=calDefaultAnchor(); updateAppH(); updateTabbarH();
 hankakuizeAll();
 syncAllPhase5();
 // 共有接続：保存済みURLがあれば、サンプル(ダミー)を描かずに読み込み完了後に初描画する
-GAS_URL=loadGasUrl(); GAS_TOKEN=loadGasToken();
+// 埋め込み(EMBED_URL)がある場合はそれを最優先し、旧端末に残った旧URLを上書きする
+if(EMBED_URL && !/^__/.test(EMBED_URL)){
+  GAS_URL=EMBED_URL; GAS_TOKEN=EMBED_TOKEN;
+  try{ saveGasUrl(GAS_URL); saveGasToken(GAS_TOKEN); }catch(_){}
+}else{
+  GAS_URL=loadGasUrl(); GAS_TOKEN=loadGasToken();
+}
 if(GAS_URL){
   showBootLoading();
   setSyncStatus("共有シートに接続中…");
