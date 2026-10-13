@@ -70,6 +70,10 @@ table{background:var(--surface-2);}
 </div>
 
 <div id="tab-matrix" style="flex:1 1 auto; display:flex; flex-direction:column; min-height:0;">
+  <div id="catbar" style="display:flex; gap:0; margin-bottom:0.7rem; flex:0 0 auto; border-bottom:1px solid var(--border-strong);">
+    <button class="catbtn" data-cat="三井" style="font-size:14px; font-weight:700; padding:8px 22px; border:1px solid var(--border-strong); border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-1px; cursor:pointer;">三井</button>
+    <button class="catbtn" data-cat="自社" style="font-size:14px; font-weight:700; padding:8px 22px; border:1px solid var(--border-strong); border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-1px; margin-left:4px; cursor:pointer;">自社</button>
+  </div>
   <div style="display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; margin-bottom:0.8rem; flex:0 0 auto;">
     <span style="position:relative; display:inline-flex; align-items:center;">
       <input type="text" id="search" placeholder="現場名・業者名で検索" style="width:auto; min-width:200px; font-size:16px; padding-right:30px;">
@@ -213,6 +217,7 @@ let calAnchor=new Date(TODAY);
 let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
 let sortKey="name"; // created(登録順) | phase | name | date1　※既定は現場名順
 let sortAsc=true; // 昇順=true / 降順=false
+let matrixCat="三井"; // 進捗管理表の表示区分タブ（三井 | 自社）。カレンダーは全件表示のまま
 let colSort={key:null, asc:true}; // 列ヘッダーからのソート（優先）。key: name|category|status|phase0..5|movein|key
 // 列フィルター状態。null＝無効。
 // name/status/vendorはSet、phaseRange[i]は各工程i(0-5)の日付範囲{from,to}、moveinRange/keyRangeは入居前清掃/鍵交換の実施日範囲
@@ -481,6 +486,12 @@ function renderBody(){
     return hay.includes(q);
   }); }
   rows=rows.filter(passColFilters);
+  // 区分タブ：各タブの件数は検索・フィルター適用後の件数。表示は選択中の区分のみ
+  const catCnt={"三井":0,"自社":0}; rows.forEach(s=>{ if(catCnt[s.category]!==undefined) catCnt[s.category]++; });
+  document.querySelectorAll(".catbtn").forEach(b=>{ const on=b.dataset.cat===matrixCat;
+    b.textContent=`${b.dataset.cat}（${catCnt[b.dataset.cat]}）`;
+    b.style.background=on?"var(--text-accent)":"var(--surface-2)"; b.style.color=on?"#fff":"var(--text-secondary)"; b.style.borderColor=on?"var(--text-accent)":"var(--border-strong)"; });
+  rows=rows.filter(s=>s.category===matrixCat);
   // 並べ替え：列ヘッダーのソート（colSort）があれば優先、なければ上部ボタン（sortKey）
   if(colSort.key){
     const val=(s)=>{
@@ -511,7 +522,7 @@ function renderBody(){
     const base=b.dataset.label||(b.dataset.label=b.textContent.trim());
     b.textContent = on ? base+(sortAsc?" ↑":" ↓") : base; });
   const tb=document.getElementById("tbody");
-  if(rows.length===0){tb.innerHTML=`<tr><td colspan="14" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; renderDetail(sites.find(s=>s.open)||null); updateFilterClearBtn(); return;}
+  if(rows.length===0){tb.innerHTML=`<tr><td colspan="14" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; document.getElementById("detail").innerHTML=""; updateFilterClearBtn(); return;}
   tb.innerHTML=rows.map(s=>{
     const cp=currentPhase(s);
     const sl=statusLabel(s);
@@ -561,7 +572,7 @@ function renderBody(){
       s[field][k]=v; refresh();
     }, opts);
   }));
-  const openS=sites.find(s=>s.open)||null;
+  const openS=rows.find(s=>s.open)||null; // 表示中の区分の行だけ（非表示タブの展開中現場は描画しない）
   document.getElementById("detail").innerHTML="";
   if(openS) renderDetailInto(openS, document.getElementById("detailinline_"+openS.id));
   updateFilterClearBtn();
@@ -2081,6 +2092,7 @@ function openZeroHolidayModal(){
   draw();
 }
 
+document.querySelectorAll(".catbtn").forEach(b=>b.addEventListener("click",()=>{ closeSpanEditor(); matrixCat=b.dataset.cat; renderBody(); const sc=document.getElementById("matrixscroll"); if(sc) sc.scrollTop=0; }));
 document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   const t=b.dataset.tab;
   closeSpanEditor();
@@ -2155,7 +2167,7 @@ function openSiteModal(editSite){
   const ov=document.createElement("div");
   ov.id="newsitemodal";
   ov.style.cssText="position:fixed; inset:0; z-index:11000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
-  const cat=isEdit?editSite.category:"三井";
+  const cat=isEdit?editSite.category:matrixCat; // 新規は今開いている区分タブを初期値に
   const curName = isEdit ? String(editSite.name) : "";
   const inMaster = buildingMaster.includes(curName);
   const nameOptions = `<option value="__free__"${(isEdit&&!inMaster)?' selected':''}>その他（手入力）</option>`
@@ -2200,6 +2212,7 @@ function openSiteModal(editSite){
       if(dup && !confirm("すでに同じ号室の登録がありますが登録してよろしいですか？")) return;
       sites.push(newSite(nextId++,name,room,c));
     }
+    matrixCat=c; // 登録・編集した現場が見えるよう、その区分のタブへ切り替え
     close(); refresh();
   };
   ov.addEventListener("keydown",e=>{ if(e.key==="Escape")close(); });
