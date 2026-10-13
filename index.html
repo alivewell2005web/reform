@@ -211,7 +211,7 @@ let sites=[];
 let nextId=1;
 let calAnchor=new Date(TODAY);
 let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
-let sortKey="created"; // created(登録順) | phase | name | date1
+let sortKey="name"; // created(登録順) | phase | name | date1　※既定は現場名順
 let sortAsc=true; // 昇順=true / 降順=false
 let colSort={key:null, asc:true}; // 列ヘッダーからのソート（優先）。key: name|category|status|phase0..5|movein|key
 // 列フィルター状態。null＝無効。
@@ -2159,7 +2159,7 @@ function openSiteModal(editSite){
   const curName = isEdit ? String(editSite.name) : "";
   const inMaster = buildingMaster.includes(curName);
   const nameOptions = `<option value="__free__"${(isEdit&&!inMaster)?' selected':''}>その他（手入力）</option>`
-    + buildingMaster.map(b=>`<option value="${b.replace(/"/g,'&quot;')}"${b===curName?' selected':''}>${b}</option>`).join("");
+    + [...buildingMaster].sort((a,b)=>String(a).localeCompare(String(b),"ja",{numeric:true})).map(b=>`<option value="${b.replace(/"/g,'&quot;')}"${b===curName?' selected':''}>${b}</option>`).join("");
   ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:20px; width:320px; max-width:92vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
     <div style="font-size:15px; font-weight:600; margin-bottom:14px;">${isEdit?'現場を編集':'新規現場を追加'}</div>
     <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:12px;">区分
@@ -2169,7 +2169,7 @@ function openSiteModal(editSite){
       </div></label>
     <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:10px;">マンション名（物件マスタから選択）
       <select id="nsNameSel" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:14px; padding:6px 8px;">${nameOptions}</select></label>
-    <input type="text" id="nsName" value="${(isEdit&&!inMaster)?curName.replace(/"/g,'&quot;'):''}" placeholder="マンション名を手入力" style="width:100%; box-sizing:border-box; margin-bottom:10px; font-size:14px; padding:6px 8px; ${(isEdit&&!inMaster)?'':'display:none;'}">
+    <input type="text" id="nsName" value="${(isEdit&&!inMaster)?curName.replace(/"/g,'&quot;'):''}" placeholder="マンション名を手入力" style="width:100%; box-sizing:border-box; margin-bottom:10px; font-size:14px; padding:6px 8px;">
     <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:16px;">号室<input type="text" id="nsRoom" value="${isEdit?String(editSite.room).replace(/"/g,'&quot;'):''}" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:14px; padding:6px 8px;"></label>
     ${isEdit&&editSite.category==="三井"?'':`<div style="font-size:11px; color:var(--text-warning); margin-bottom:12px; ${isEdit?'':'display:none;'}"><i class="ti ti-alert-triangle" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i> 区分を変更すると使用する工程が変わります。</div>`}
     <div style="display:flex; gap:8px; justify-content:flex-end;">
@@ -2183,6 +2183,7 @@ function openSiteModal(editSite){
   const sel=ov.querySelector("#nsNameSel"), free=ov.querySelector("#nsName");
   const syncFree=()=>{ if(sel.value==="__free__"){ free.style.display=""; free.focus(); } else { free.style.display="none"; } };
   sel.addEventListener("change",syncFree);
+  free.style.display = (sel.value==="__free__") ? "" : "none"; // 初期状態：「その他」選択中なら手入力欄を表示
   const getName=()=> sel.value==="__free__" ? free.value.trim() : sel.value;
   if(sel.value==="__free__") free.focus(); else sel.focus();
   free.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ov.querySelector("#nsRoom").focus(); } });
