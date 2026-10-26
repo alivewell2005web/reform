@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v81</title>
+<title>リフォーム進捗管理アプリ v82</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -83,14 +83,15 @@ table{background:var(--surface-2);}
     <span style="font-size:12px; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;">並べ替え：
       <button class="sortbtn" data-sort="created" style="font-size:12px; padding:3px 10px;">登録順</button>
       <button class="sortbtn" data-sort="phase" style="font-size:12px; padding:3px 10px;">現在地</button>
+      <button class="sortbtn" data-sort="cancel" style="font-size:12px; padding:3px 10px;">解約日</button>
       <button class="sortbtn" data-sort="name" style="font-size:12px; padding:3px 10px;">現場名</button>
-      <button class="sortbtn" data-sort="date1" style="font-size:12px; padding:3px 10px;">①立会日</button>
+      <button class="sortbtn" data-sort="date1" style="font-size:12px; padding:3px 10px;">②立会日</button>
     </span>
     <button id="clearfilters" style="display:none; font-size:12px; padding:3px 10px; align-items:center; gap:4px; color:var(--text-danger);"><i class="ti ti-filter-off" aria-hidden="true" style="font-size:14px; vertical-align:-2px;"></i> フィルター解除</button>
     <button id="addbtn" style="margin-left:auto;"><i class="ti ti-plus" aria-hidden="true" style="font-size:15px; vertical-align:-2px;"></i> 新規現場</button>
   </div>
   <div id="matrixscroll" style="flex:1 1 auto; min-height:0; overflow:auto; border:0.5px solid var(--border); border-radius:12px; overscroll-behavior:none; margin-bottom:16px;">
-    <table style="border-collapse:collapse; font-size:13px; min-width:1080px;"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+    <table style="border-collapse:collapse; font-size:13px; min-width:1150px;"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
   </div>
   <div id="detail" style="margin-top:12px;"></div>
 </div>
@@ -135,13 +136,14 @@ table{background:var(--surface-2);}
 
 <script>
 const APP_TITLE=document.title; // 印刷時にタイトルを差し替えた後の復元用
-const PHASES=["①退去立会","②見積作成・提出","③管理会社発注","④工事手配・工程管理","⑤完了チェック","⑥完了報告・請求書発行"];
+// 表示番号：①は解約日（工程ではなく現場の項目）。内部インデックス0〜5は従来どおり（0=②退去立会 … 5=⑦完了報告・請求書発行）
+const PHASES=["②退去立会","③見積作成・提出","④管理会社発注","⑤工事手配・工程管理","⑥完了チェック","⑦完了報告・請求書発行"];
 const NPHASE=6;
 // 入居前清掃・鍵交換・退去立会の色/略号（カレンダー単日チップ用に新設）
 const EXTRA_MOVEIN={key:"入居前清掃", abbr:"入居清掃", color:{bg:"#FFE4E6",done:"#FB7185",fg:"#9F1239"}};
 const EXTRA_KEY   ={key:"鍵交換",     abbr:"鍵交換",  color:{bg:"#FEF9C3",done:"#EAB308",fg:"#854D0E"}};
 const EXTRA_MTG   ={key:"退去立会",   abbr:"立会",    color:{bg:"#E0E7FF",done:"#6366F1",fg:"#312E81"}};
-const PHASE_MILESTONE_COLOR={bg:"#F1F5F9",done:"#64748B",fg:"#334155"}; // ②③⑤⑥の工程チップ色
+const PHASE_MILESTONE_COLOR={bg:"#F1F5F9",done:"#64748B",fg:"#334155"}; // ③④⑥⑦の工程チップ色
 const WORKDEF={"リフォーム":{type:"span"},"クリーニング":{type:"single"},"設備交換":{type:"multi"},"リペア":{type:"single"},"畳・ふすま":{type:"single"},"設備廃棄":{type:"single"},"その他":{type:"multi"}};
 const WORKS=Object.keys(WORKDEF);
 const WORKABBR={"リフォーム":"内装","クリーニング":"清掃","設備交換":"設備","リペア":"ﾘﾍﾟｱ","畳・ふすま":"畳・襖","設備廃棄":"廃棄","その他":"他"};
@@ -160,7 +162,7 @@ let buildingMaster=["Gran Bridge Dempo","ウェルホームズ中之島北","ネ
 // 工事種別ごとのデフォルト担当業者
 const DEFAULT_VENDOR={"リフォーム":"ｱﾙﾌｧ","クリーニング":"ZERO","設備交換":"大松","リペア":"ｼｬﾑｽ","畳・ふすま":"森上","設備廃棄":"ｶﾞﾘﾊﾞｰ","その他":null};
 
-// 立会者の選択肢（①退去立会）
+// 立会者の選択肢（②退去立会）
 const ATTENDEES=["鵜飼","野間元","秀島","西谷","森","現調"];
 // アルファ＆ZERO 複合フィルタ用の特殊値
 const VENDOR_AZ="__alpha_zero__";
@@ -193,7 +195,7 @@ const HOLIDAYS={
 };
 function holidayName(key){ return HOLIDAYS[key]||null; }
 
-function newSite(id,name,room,category){return {id,name,room,category:category||"三井",plan:[null,null,null,null,null,null],act:[null,null,null,null,null,null],works:{},open:false,
+function newSite(id,name,room,category){return {id,name,room,category:category||"三井",cancelDate:null,plan:[null,null,null,null,null,null],act:[null,null,null,null,null,null],works:{},open:false,
   mtgTime:null,                        // 退去立会の開始時刻（hh:mm）
   mtgEndTime:null,                     // 退去立会の終了時刻（hh:mm、幅がある場合のみ）
   attendee:null,                       // 立会者（鵜飼/野間元/秀島/西谷/森/現調）
@@ -215,13 +217,13 @@ let sites=[];
 let nextId=1;
 let calAnchor=new Date(TODAY);
 let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
-let sortKey="name"; // created(登録順) | phase | name | date1　※既定は現場名順
+let sortKey="cancel"; // created(登録順) | phase | cancel(解約日→現場名→部屋番号) | name(現場名→部屋番号) | date1　※既定は解約日順
 let sortAsc=true; // 昇順=true / 降順=false
 let matrixCat="三井"; // 進捗管理表の表示区分タブ（三井 | 自社）。カレンダーは全件表示のまま
 let colSort={key:null, asc:true}; // 列ヘッダーからのソート（優先）。key: name|category|status|phase0..5|movein|key
 // 列フィルター状態。null＝無効。
 // name/status/vendorはSet、phaseRange[i]は各工程i(0-5)の日付範囲{from,to}、moveinRange/keyRangeは入居前清掃/鍵交換の実施日範囲
-let colFilters={ name:null, status:null, vendor:null, category:null,
+let colFilters={ name:null, status:null, vendor:null, category:null, cancelRange:null,
   phaseRange:[null,null,null,null,null,null], moveinRange:null, keyRange:null };
 
 // 要件5：登録済み現場名・物件マスタのカタカナを半角カナへ一括変換
@@ -235,14 +237,14 @@ function hankakuizeAll(){
   vendorMaster=[...new Set(vendorMaster.map(renameVendor))];
 }
 function currentPhase(s){let d=0;for(let i=0;i<NPHASE;i++){if(s.act[i])d=i+1;}return d;}
-// 区分ごとに使う工程インデックス（自社は①④⑤=0,3,4のみ）
+// 区分ごとに使う工程インデックス（自社は②⑤⑥=0,3,4のみ）
 function activePhases(s){ return s.category==="自社" ? [0,3,4] : [0,1,2,3,4,5]; }
 function isPhaseActive(s,i){ return activePhases(s).includes(i); }
 // 区分ごとに入居前清掃・鍵交換を使うか（自社は使わない）
 function usesExtra(s){ return s.category!=="自社"; }
 // 実施日が今日以前（到来済み）か
 function dateReached(d){ if(!d) return false; const t=parseISO(d); if(!t) return false; const now=new Date(); now.setHours(0,0,0,0); return t.getTime()<=now.getTime(); }
-// 現場が完了扱いか。三井：全6工程＋鍵交換実施（実施日到来まで完了にしない）。自社：⑤完了チェック実績。
+// 現場が完了扱いか。三井：全6工程＋鍵交換実施（実施日到来まで完了にしない）。自社：⑥完了チェック実績。
 function isComplete(s){
   if(s.category==="自社") return !!s.act[4];
   return currentPhase(s)>=NPHASE && !!(s.keyChange && s.keyChange.done) && dateReached(s.keyChange.done);
@@ -282,6 +284,7 @@ function filterIcon(key){
   if(key==="name") on=!!colFilters.name;
   else if(key==="category") on=!!colFilters.category;
   else if(key==="status") on=!!colFilters.status;
+  else if(key==="cancel") on=!!colFilters.cancelRange;
   else if(key==="movein") on=!!colFilters.moveinRange;
   else if(key==="key") on=!!colFilters.keyRange;
   else if(key.startsWith("phase")){ const i=Number(key.slice(5)); on=!!colFilters.phaseRange[i] || (i===3&&!!colFilters.vendor); }
@@ -312,6 +315,7 @@ function openColFilter(key,anchorEl){
   if(key==="name") inner=checklist("現場名で絞り込み", distinctNames(), colFilters.name);
   else if(key==="category") inner=checklist("区分で絞り込み", distinctCategories(), colFilters.category);
   else if(key==="status") inner=checklist("状態で絞り込み", distinctStatuses(), colFilters.status);
+  else if(key==="cancel") inner=dateRange("解約日で絞り込み", colFilters.cancelRange);
   else if(key==="movein") inner=dateRange("入居前清掃 実施日で絞り込み", colFilters.moveinRange);
   else if(key==="key") inner=dateRange("鍵交換 実施日で絞り込み", colFilters.keyRange);
   else if(key.startsWith("phase")){
@@ -320,7 +324,7 @@ function openColFilter(key,anchorEl){
     if(phaseIdx===3){ inner+=`<div style="margin-top:8px;">`+checklist("業者で絞り込み", distinctVendors(), colFilters.vendor)+`</div>`; }
   }
   // この列のソートキー（列ヘッダーからの並べ替え用）
-  const sortColKey = (key==="name"||key==="category"||key==="status"||key==="movein"||key==="key") ? key : (key.startsWith("phase")?key:null);
+  const sortColKey = (key==="name"||key==="category"||key==="status"||key==="cancel"||key==="movein"||key==="key") ? key : (key.startsWith("phase")?key:null);
   const sortUI = sortColKey ? `<div style="margin-top:8px; border-top:0.5px solid var(--border); padding-top:8px;">
       <div style="font-weight:600; margin-bottom:6px;">この列で並べ替え</div>
       <div style="display:flex; gap:6px;">
@@ -351,6 +355,7 @@ function openColFilter(key,anchorEl){
   }
   box.querySelector("#cfApply").addEventListener("click",()=>{
     if(key==="name"||key==="status"||key==="category"){ const {all,checked}=readChecks(); colFilters[key]= (checked.length===all)?null:new Set(checked); }
+    else if(key==="cancel"){ colFilters.cancelRange=readRange(); }
     else if(key==="movein"){ colFilters.moveinRange=readRange(); }
     else if(key==="key"){ colFilters.keyRange=readRange(); }
     else if(key.startsWith("phase")){ colFilters.phaseRange[phaseIdx]=readRange(); if(phaseIdx===3){ const {all,checked}=readChecks(); colFilters.vendor=(checked.length===all)?null:new Set(checked); } }
@@ -360,6 +365,7 @@ function openColFilter(key,anchorEl){
     if(key==="name") colFilters.name=null;
     else if(key==="category") colFilters.category=null;
     else if(key==="status") colFilters.status=null;
+    else if(key==="cancel") colFilters.cancelRange=null;
     else if(key==="movein") colFilters.moveinRange=null;
     else if(key==="key") colFilters.keyRange=null;
     else if(key.startsWith("phase")){ colFilters.phaseRange[phaseIdx]=null; if(phaseIdx===3) colFilters.vendor=null; }
@@ -368,11 +374,12 @@ function openColFilter(key,anchorEl){
 }
 function renderHead(){
   const stTop=`position:sticky; top:0; z-index:3; background:var(--surface-1); vertical-align:middle;`;
-  const extraTh=[["⑦","入居前清掃","movein"],["⑧","鍵交換","key"]].map(([num,n,fk])=>`<th style="${stTop} padding:8px 4px; text-align:center; min-width:84px; font-weight:400; font-size:13px; border-left:0.5px solid var(--border);">${num}${filterIcon(fk)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${n}</div></th>`).join("");
+  const extraTh=[["⑧","入居前清掃","movein"],["⑨","鍵交換","key"]].map(([num,n,fk])=>`<th style="${stTop} padding:8px 4px; text-align:center; min-width:84px; font-weight:400; font-size:13px; border-left:0.5px solid var(--border);">${num}${filterIcon(fk)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${n}</div></th>`).join("");
   document.getElementById("thead").innerHTML=`<tr style="color:var(--text-secondary);">
     <th style="position:sticky; top:0; left:0; z-index:5; background:var(--surface-1); padding:9px 10px; text-align:left; min-width:200px; border-right:0.5px solid var(--border); font-size:13px;">現場${filterIcon("name")}</th>
     <th style="${stTop} padding:9px 6px; text-align:center; min-width:56px; border-right:0.5px solid var(--border); font-size:13px;">区分${filterIcon("category")}</th>
     <th style="${stTop} padding:9px 6px; text-align:left; min-width:92px; border-right:0.5px solid var(--border); font-size:13px;">現在地${filterIcon("status")}</th>
+    <th style="${stTop} padding:8px 4px; text-align:center; min-width:64px; font-weight:400; font-size:13px; border-left:0.5px solid var(--border);">①${filterIcon("cancel")}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">解約日</div></th>
     ${PHASES.map((p,idx)=>{const nm=p.slice(1).replace("見積作成・提出","見積作成<br>・提出").replace("管理会社発注","管理会社<br>発注").replace("・工程管理","<br>・工程管理").replace("完了チェック","完了<br>チェック").replace("・請求書発行","<br>・請求書発行"); const mw=idx===0?"90px":"64px"; return `<th style="${stTop} padding:8px 4px; text-align:center; min-width:${mw}; font-weight:400; font-size:13px;">${p.slice(0,1)}${filterIcon("phase"+idx)}<div style="font-size:11px; color:var(--text-secondary); font-weight:500; line-height:1.3;">${nm}</div></th>`;}).join("")}
     ${extraTh}<th style="${stTop} padding:9px 10px; text-align:left; min-width:140px; border-left:0.5px solid var(--border); font-size:13px;">メモ</th></tr>`;
   document.querySelectorAll("[data-colfilter]").forEach(el=>el.addEventListener("click",(e)=>{ e.stopPropagation(); openColFilter(el.dataset.colfilter, el); }));
@@ -385,16 +392,21 @@ function extraCellHtml(s,field){
     <div style="font-size:12px; white-space:nowrap;"><span style="color:var(--text-muted);">発注</span> <span data-xedit="${s.id}:${field}:order" style="cursor:pointer; color:var(--text-secondary);">${o||'—'}</span></div>
     <div style="font-size:12px; white-space:nowrap; margin-top:3px;"><span style="color:var(--text-muted);">実施</span> <span data-xedit="${s.id}:${field}:done" style="cursor:pointer; ${dn?'color:var(--text-success); font-weight:500;':'color:var(--text-muted);'}">${dn||'—'}</span></div></td>`;
 }
+// 解約日セル（①）：タップでカレンダー選択
+function cancelCellHtml(s){
+  const d=fmt(s.cancelDate);
+  return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border);"><div data-cancel="${s.id}" style="cursor:pointer; font-size:13px; white-space:nowrap;">${d?`<span style="color:var(--text-secondary);">${d}</span>`:'<span style="color:var(--text-muted);">日付</span>'}</div></td>`;
+}
 function cellHtml(s,i){
   // 区分で使わない工程はグレーアウト・入力不可
   if(!isPhaseActive(s,i)){ return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); background:var(--surface-1);"><span style="color:var(--text-muted); font-size:11px;">—</span></td>`; }
   const plan=fmt(s.plan[i]),act=fmt(s.act[i]),filled=!!act;
-  // ④(i=3) 工事手配・工程管理：④内訳の最終工事日を自動反映（日付のみ表示、編集不可）
+  // ⑤(i=3) 工事手配・工程管理：⑤内訳の最終工事日を自動反映（日付のみ表示、編集不可）
   if(i===3){
     return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border);">
       <div title="工事の最終日を自動反映" style="font-size:13px;">${plan?`<span style="color:var(--text-secondary);">${plan}</span>`:'<span style="color:var(--text-muted);">自動</span>'}<i class="ti ti-refresh" aria-hidden="true" style="font-size:10px; vertical-align:0; margin-left:2px; color:var(--text-muted);"></i></div></td>`;
   }
-  // ①(i=0) 退去立会：日付＋時刻(hh:mm、幅可)＋立会者。日付未入力は「未定」
+  // ②(i=0) 退去立会：日付＋時刻(hh:mm、幅可)＋立会者。日付未入力は「未定」
   if(i===0){
     const bg0 = act ? 'background:var(--bg-success);' : '';
     const att = s.attendee || '';
@@ -414,12 +426,12 @@ function cellHtml(s,i){
       </div>
       <div style="margin-top:2px; font-size:12px; white-space:nowrap;">${endPart}${attPart}</div></td>`;
   }
-  // ⑤(i=4) 完了チェック：単日。工事最終日より前なら警告背景
+  // ⑥(i=4) 完了チェック：単日。工事最終日より前なら警告背景
   let bg = filled?'background:var(--bg-success);':'';
   let warnTip="";
-  if(i===4 && phase6IsPast(s)){ bg='background:var(--bg-danger, #fbc9c9);'; warnTip=' title="完了チェック日が④工事の最終日より前です"'; }
-  // ③(i=2) 管理会社発注：鍵交換の発注日があるのに③発注日が空なら濃い赤で警告
-  if(i===2 && !s.act[2] && s.keyChange && s.keyChange.order){ bg='background:var(--bg-danger-strong, #f5a9a9);'; warnTip=' title="鍵交換が発注済みですが③管理会社発注が未入力です"'; }
+  if(i===4 && phase6IsPast(s)){ bg='background:var(--bg-danger, #fbc9c9);'; warnTip=' title="完了チェック日が⑤工事の最終日より前です"'; }
+  // ④(i=2) 管理会社発注：鍵交換の発注日があるのに④発注日が空なら濃い赤で警告
+  if(i===2 && !s.act[2] && s.keyChange && s.keyChange.order){ bg='background:var(--bg-danger-strong, #f5a9a9);'; warnTip=' title="鍵交換が発注済みですが④管理会社発注が未入力です"'; }
   const emptyLabel = '<span style="color:var(--text-muted);">日付</span>';
   return `<td${warnTip} style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); ${bg}">
     <div data-edit="${s.id}:${i}:act" style="cursor:pointer; font-size:13px;">${act?`<span style="color:var(--text-success); font-weight:500;">${act}</span>`:emptyLabel}</div></td>`;
@@ -434,17 +446,17 @@ function siteVendors(s){ // その現場に登録された業者名を集約
 }
 // 現場の状態ラベル（フィルター用）
 // 現在地の短縮ラベル（丸番号つき）
-const STATUS_WAIT=["①立会日待ち","②見積待ち","③発注待ち","④工事手配待ち","⑤完了チェック待ち","⑥請求書発行待ち"];
-const STATUS_KEY_WAIT="⑧鍵交換待ち";
+const STATUS_WAIT=["②立会日待ち","③見積待ち","④発注待ち","⑤工事手配待ち","⑥完了チェック待ち","⑦請求書発行待ち"];
+const STATUS_KEY_WAIT="⑨鍵交換待ち";
 function statusLabel(s){
   if(isComplete(s)) return "完了";
   if(s.category==="自社"){
-    // 自社は①④⑤の順。次に必要な工程を待ち表示
+    // 自社は②⑤⑥の順。次に必要な工程を待ち表示
     for(const i of [0,3,4]){ if(!s.act[i]) return STATUS_WAIT[i]; }
     return "完了";
   }
   const cp=currentPhase(s);
-  if(cp>=NPHASE) return STATUS_KEY_WAIT; // ⑥まで完了→鍵交換待ち（⑦入居前清掃は待ち条件にしない）
+  if(cp>=NPHASE) return STATUS_KEY_WAIT; // ⑦まで完了→鍵交換待ち（⑧入居前清掃は待ち条件にしない）
   return STATUS_WAIT[cp];
 }
 // 現場の全工事日（span終了/single・multi予定）の最小・最大
@@ -471,11 +483,21 @@ function passColFilters(s){
   if(colFilters.status && !colFilters.status.has(statusLabel(s))) return false;
   if(colFilters.vendor){ const vs=siteVendors(s); if(!vs.some(v=>colFilters.vendor.has(v))) return false; }
   for(let i=0;i<NPHASE;i++){ if(colFilters.phaseRange[i] && !inRangeVal(phaseDate(s,i),colFilters.phaseRange[i])) return false; }
+  if(colFilters.cancelRange && !inRangeVal(s.cancelDate,colFilters.cancelRange)) return false;
   if(colFilters.moveinRange && !inRangeVal(s.moveinClean.done,colFilters.moveinRange)) return false;
   if(colFilters.keyRange && !inRangeVal(s.keyChange.done,colFilters.keyRange)) return false;
   return true;
 }
-function anyColFilterActive(){ return !!(colFilters.name||colFilters.category||colFilters.status||colFilters.vendor||colFilters.moveinRange||colFilters.keyRange||colFilters.phaseRange.some(r=>r)); }
+function anyColFilterActive(){ return !!(colFilters.name||colFilters.category||colFilters.status||colFilters.vendor||colFilters.cancelRange||colFilters.moveinRange||colFilters.keyRange||colFilters.phaseRange.some(r=>r)); }
+// 並べ替え用の比較関数
+function siteNameCmp(a,b){ return String(a.name).localeCompare(String(b.name),"ja"); }
+function siteRoomCmp(a,b){ return String(a.room==null?"":a.room).localeCompare(String(b.room==null?"":b.room),"ja",{numeric:true}); } // 部屋番号は数値として昇順（305 < 1203）
+function siteTieCmp(a,b){ return siteNameCmp(a,b)||siteRoomCmp(a,b)||(a.id-b.id); } // 現場名→部屋番号
+function cancelDateCmp(a,b,asc){ // 解約日。未入力は昇順・降順とも常に末尾
+  const x=a.cancelDate||"", y=b.cancelDate||"";
+  if(x===y) return 0; if(!x) return 1; if(!y) return -1;
+  return (x<y?-1:1)*(asc?1:-1);
+}
 function renderBody(){
   const f=document.getElementById("filter").value;
   const q=(document.getElementById("search").value||"").trim().toLowerCase();
@@ -493,7 +515,12 @@ function renderBody(){
     b.style.background=on?"var(--text-accent)":"var(--surface-2)"; b.style.color=on?"#fff":"var(--text-secondary)"; b.style.borderColor=on?"var(--text-accent)":"var(--border-strong)"; });
   rows=rows.filter(s=>s.category===matrixCat);
   // 並べ替え：列ヘッダーのソート（colSort）があれば優先、なければ上部ボタン（sortKey）
-  if(colSort.key){
+  if(colSort.key==="name"){
+    // 現場名順：同一物件内は部屋番号順（降順指定でも部屋番号は昇順のまま）
+    rows.sort((a,b)=>{ const n=siteNameCmp(a,b); if(n) return colSort.asc?n:-n; return siteRoomCmp(a,b)||(a.id-b.id); });
+  } else if(colSort.key==="cancel"){
+    rows.sort((a,b)=>{ const c=cancelDateCmp(a,b,colSort.asc); return c||siteTieCmp(a,b); });
+  } else if(colSort.key){
     const val=(s)=>{
       if(colSort.key==="name") return (s.name+" "+String(s.room)).toLowerCase();
       if(colSort.key==="category") return s.category||"";
@@ -510,11 +537,12 @@ function renderBody(){
       return colSort.asc ? cmp : -cmp;
     });
   } else {
-  if(sortKey==="name") rows.sort((a,b)=>{ const n=a.name.localeCompare(b.name,"ja"); if(n!==0) return n; return (a.act[0]||a.plan[0]||"9999").localeCompare(b.act[0]||b.plan[0]||"9999"); });
+  if(sortKey==="name") rows.sort((a,b)=>{ const n=siteNameCmp(a,b); if(n) return sortAsc?n:-n; return siteRoomCmp(a,b)||(a.id-b.id); });
+  else if(sortKey==="cancel") rows.sort((a,b)=>{ const c=cancelDateCmp(a,b,sortAsc); return c||siteTieCmp(a,b); });
   else if(sortKey==="date1") rows.sort((a,b)=>(a.act[0]||a.plan[0]||"9999").localeCompare(b.act[0]||b.plan[0]||"9999"));
   else if(sortKey==="phase") rows.sort((a,b)=>currentPhase(a)-currentPhase(b));
   else rows.sort((a,b)=>a.id-b.id); // created（既定＝登録順）
-  if(!sortAsc) rows.reverse();
+  if(!sortAsc && sortKey!=="name" && sortKey!=="cancel") rows.reverse();
   }
   // ソートボタンのアクティブ表示（選択中は昇順/降順の矢印つき。列ソート中は非アクティブ）
   document.querySelectorAll(".sortbtn").forEach(b=>{ const on=!colSort.key && b.dataset.sort===sortKey;
@@ -522,7 +550,7 @@ function renderBody(){
     const base=b.dataset.label||(b.dataset.label=b.textContent.trim());
     b.textContent = on ? base+(sortAsc?" ↑":" ↓") : base; });
   const tb=document.getElementById("tbody");
-  if(rows.length===0){tb.innerHTML=`<tr><td colspan="14" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; document.getElementById("detail").innerHTML=""; updateFilterClearBtn(); return;}
+  if(rows.length===0){tb.innerHTML=`<tr><td colspan="15" style="padding:1.2rem; text-align:center; color:var(--text-muted);">${(q||anyColFilterActive())?"条件に一致する現場がありません":"該当なし"}</td></tr>`; document.getElementById("detail").innerHTML=""; updateFilterClearBtn(); return;}
   tb.innerHTML=rows.map(s=>{
     const cp=currentPhase(s);
     const sl=statusLabel(s);
@@ -538,7 +566,7 @@ function renderBody(){
         <div style="display:flex; align-items:flex-start; gap:6px;">
           <div data-toggle="${s.id}" style="cursor:pointer; flex:1;">
             <div style="font-weight:500;"><i class="ti ti-chevron-${s.open?'down':'right'}" aria-hidden="true" style="font-size:13px; vertical-align:-1px;"></i> ${s.name}</div>
-            <div style="font-size:11px; color:var(--text-secondary); padding-left:16px;"><span style="font-weight:700; color:var(--text-primary);">${s.room}号室</span>${wn?` · ④内訳${wn}件`:""}${missBadge}</div>
+            <div style="font-size:11px; color:var(--text-secondary); padding-left:16px;"><span style="font-weight:700; color:var(--text-primary);">${s.room}号室</span>${wn?` · ⑤内訳${wn}件`:""}${missBadge}</div>
           </div>
           <div style="display:flex; flex-direction:column; gap:3px; flex:none;">
           <button data-siteedit="${s.id}" title="現場名・区分を編集" style="font-size:11px; padding:2px 7px; color:var(--text-secondary); border-color:var(--border);"><i class="ti ti-pencil" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i></button>
@@ -548,12 +576,13 @@ function renderBody(){
       <td style="padding:6px 6px; text-align:center; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">
         <span style="display:inline-block; font-size:11px; font-weight:600; padding:2px 7px; border-radius:var(--radius); background:${catColor.bg}; color:${catColor.fg};">${s.category}</span></td>
       <td style="padding:6px 8px; background:${s.open?'var(--surface-1)':'var(--surface-2)'}; border-right:0.5px solid var(--border);">${status}</td>
-      ${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}<td style="padding:5px 6px; border-left:0.5px solid var(--border); vertical-align:top;"><textarea data-memo="${s.id}" rows="2" placeholder="メモ" style="width:130px; box-sizing:border-box; font-size:12px; padding:3px 5px; resize:vertical; min-height:32px;">${(s.memo||"").replace(/</g,"&lt;")}</textarea></td></tr>`
-    + (s.open ? `<tr class="detailrow"><td colspan="14" style="padding:0 10px 12px; background:var(--bg-accent-muted); position:sticky; left:0;"><div id="detailinline_${s.id}"></div></td></tr>` : "");
+      ${cancelCellHtml(s)}${[0,1,2,3,4,5].map(i=>cellHtml(s,i)).join("")}${extraCellHtml(s,"moveinClean")}${extraCellHtml(s,"keyChange")}<td style="padding:5px 6px; border-left:0.5px solid var(--border); vertical-align:top;"><textarea data-memo="${s.id}" rows="2" placeholder="メモ" style="width:130px; box-sizing:border-box; font-size:12px; padding:3px 5px; resize:vertical; min-height:32px;">${(s.memo||"").replace(/</g,"&lt;")}</textarea></td></tr>`
+    + (s.open ? `<tr class="detailrow"><td colspan="15" style="padding:0 10px 12px; background:var(--bg-accent-muted); position:sticky; left:0;"><div id="detailinline_${s.id}"></div></td></tr>` : "");
   }).join("");
   tb.querySelectorAll("[data-toggle]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.toggle)); if(s){const was=s.open; sites.forEach(x=>x.open=false); s.open=!was; refresh();}}));
   tb.querySelectorAll("[data-siteedit]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); openEditSiteModal(Number(el.dataset.siteedit));}));
   tb.querySelectorAll("[data-sitedel]").forEach(el=>el.addEventListener("click",(e)=>{e.stopPropagation(); const id=Number(el.dataset.sitedel); const s=sites.find(x=>x.id===id); if(!s)return; if(confirm(`「${s.name} ${s.room}号室」を削除します。工事内訳や金額など、この現場の全データが消えます。よろしいですか？`)){ sites=sites.filter(x=>x.id!==id); refresh(); }}));
+  tb.querySelectorAll("[data-cancel]").forEach(el=>el.addEventListener("click",()=>{ const s=sites.find(x=>x.id===Number(el.dataset.cancel)); if(!s)return; openCancelPicker(s.cancelDate,(v)=>{ s.cancelDate=v; refresh(); }); }));
   tb.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>{const [id,idx,kind]=el.dataset.edit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return; const i=Number(idx);
     if(i===0){ openDateTimeInline(el,s.act[0],s.mtgTime,(dv,tv,ev,av,sv)=>{s.act[0]=dv; s.mtgTime=tv; s.mtgEndTime=ev; s.attendee=av; s.survey=sv; refresh();},s.mtgEndTime,s.attendee,s.survey); return; }
     openDateInline(el,s[kind][i],(v)=>{s[kind][i]=v; refresh();});}));
@@ -562,12 +591,12 @@ function renderBody(){
   tb.querySelectorAll("[data-attendee]").forEach(el=>el.addEventListener("click",()=>{const s=sites.find(x=>x.id===Number(el.dataset.attendee)); if(s)openMtg(s,el);}));
   tb.querySelectorAll("textarea[data-memo]").forEach(el=>el.addEventListener("input",()=>{const s=sites.find(x=>x.id===Number(el.dataset.memo)); if(s){s.memo=el.value; dirty=true; scheduleAutoSave();}}));
   tb.querySelectorAll("[data-xedit]").forEach(el=>el.addEventListener("click",()=>{const [id,field,k]=el.dataset.xedit.split(":"); const s=sites.find(x=>x.id===Number(id)); if(!s)return;
-    // 鍵交換の実施日は④予定日(plan[3])より後のみ許可
+    // 鍵交換の実施日は⑤予定日(plan[3])より後のみ許可
     let opts={};
     if(field==="keyChange" && k==="done" && s.plan[3]){ opts.min=dateAdd(s.plan[3],1); }
     openDateInline(el,s[field][k],(v)=>{
       if(field==="keyChange" && k==="done" && v && s.plan[3] && v<=s.plan[3]){
-        alert(`鍵交換の実施日は、④工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return;
+        alert(`鍵交換の実施日は、⑤工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return;
       }
       s[field][k]=v; refresh();
     }, opts);
@@ -582,7 +611,7 @@ function updateFilterClearBtn(){
   const btn=document.getElementById("clearfilters"); if(!btn) return;
   btn.style.display = anyColFilterActive() ? "inline-flex" : "none";
 }
-function clearAllColFilters(){ colFilters={ name:null, status:null, vendor:null, category:null, phaseRange:[null,null,null,null,null,null], moveinRange:null, keyRange:null }; renderHead(); renderBody(); }
+function clearAllColFilters(){ colFilters={ name:null, status:null, vendor:null, category:null, cancelRange:null, phaseRange:[null,null,null,null,null,null], moveinRange:null, keyRange:null }; renderHead(); renderBody(); }
 
 function getByPath(o,p){for(const k of p.split(":"))o=o[k];return o;}
 function setByPath(o,p,v){const ks=p.split(":");for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=v;}
@@ -668,7 +697,7 @@ function renderDetailInto(s, d){
     }
   });
   d.innerHTML=`<div style="background:var(--surface-1); border:0.5px solid var(--border); border-radius:12px; padding:12px 16px;">
-    <div style="font-size:13px; font-weight:500; margin-bottom:10px;">④ 工事手配の内訳 — ${s.name} ${s.room}号室</div>
+    <div style="font-size:13px; font-weight:500; margin-bottom:10px;">⑤ 工事手配の内訳 — ${s.name} ${s.room}号室</div>
     <div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:12px;">
       <tr style="color:var(--text-secondary); text-align:left;"><th style="padding:4px 8px; font-weight:400; white-space:nowrap;">日付</th><th style="padding:4px 8px; font-weight:400;">種別</th><th style="padding:4px 8px; font-weight:400;">内容</th><th style="padding:4px 8px; font-weight:400;">業者</th><th></th></tr>
       ${rows||`<tr><td colspan="5" style="padding:8px; color:var(--text-muted);">内訳なし</td></tr>`}
@@ -792,7 +821,7 @@ function extraChipsOnDay(key){
     if((wantAll||calWork===EXTRA_MOVEIN.key) && s.moveinClean.done===key) out.push({kind:"movein",site:s,color:EXTRA_MOVEIN.color,abbr:EXTRA_MOVEIN.abbr});
     if((wantAll||calWork===EXTRA_KEY.key) && s.keyChange.done===key) out.push({kind:"key",site:s,color:EXTRA_KEY.color,abbr:EXTRA_KEY.abbr});
   });
-  // 1現場に絞ったとき（かつ工事フィルタ=すべて）は、②③⑤⑥の工程日も工程名付きで表示（実績優先、なければ予定）
+  // 1現場に絞ったとき（かつ工事フィルタ=すべて）は、③④⑥⑦の工程日も工程名付きで表示（実績優先、なければ予定）
   if(calSite!=="all" && !vendorFiltered() && wantAll){
     const s=sites.find(x=>String(x.id)===String(calSite));
     if(s){ [1,2,4,5].forEach(i=>{ if(!isPhaseActive(s,i))return; const dt=s.act[i]||s.plan[i]; if(dt===key){ out.push({kind:"phase",site:s,phaseIdx:i,color:PHASE_MILESTONE_COLOR,abbr:PHASES[i].slice(1)}); } }); }
@@ -908,7 +937,7 @@ function applyDrop(payload,key){
   else if(payload.type==="new"){ const s=sites.find(x=>x.id===payload.id); const wk=s.works[payload.w];
     if(WORKDEF[payload.w].type==="span"){ wk.start=key; wk.end=key; } else if(WORKDEF[payload.w].type==="multi"){ if(payload.ix!=null&&wk.items&&wk.items[payload.ix]) wk.items[payload.ix].plan=key; } else { wk.plan=key; } syncAndRefresh(s); }
   else if(payload.type==="extra"){ const s=sites.find(x=>x.id===payload.id);
-    if(payload.field==="keyChange" && s.plan[3] && key<=s.plan[3]){ alert(`鍵交換の実施日は、④工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return; }
+    if(payload.field==="keyChange" && s.plan[3] && key<=s.plan[3]){ alert(`鍵交換の実施日は、⑤工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return; }
     s[payload.field].done=key; refresh(); }
   else if(payload.type==="mtg"){ const s=sites.find(x=>x.id===payload.id); s.act[0]=key; refresh(); }
   else if(payload.type==="phase"){ const s=sites.find(x=>x.id===payload.id); const i=payload.phaseIdx; if(payload.useAct) s.act[i]=key; else s.plan[i]=key; refresh(); }
@@ -935,7 +964,7 @@ function renderCalendar(){
   document.getElementById("calhint").textContent = calWork==="all"
     ? "色＝工事種別（凡例）。濃い色＝完了済み。帯・チップはドラッグで移動、クリックで日付編集。下の未手配をカレンダーへドラッグで割当。"
     : isExtraFilter ? "入居前清掃・鍵交換の実施日を表示（管理表で編集）。"
-    : (WORKDEF[calWork].type==="multi" ? "複数明細の工事。ドラッグ移動・クリック編集可。新規追加は④内訳から。"
+    : (WORKDEF[calWork].type==="multi" ? "複数明細の工事。ドラッグ移動・クリック編集可。新規追加は⑤内訳から。"
     : "帯・チップはドラッグで移動、クリックで編集。下の未手配をカレンダーへドラッグで割当。");
 
   const days=daysInPeriod();
@@ -1200,7 +1229,7 @@ function wireCalendar(grid){
       return;
     }
     if(e.kind==="phase"){
-      // ②③⑤⑥：ドラッグで日付移動、クリックで編集。実績があれば実績を、なければ予定を動かす
+      // ③④⑥⑦：ドラッグで日付移動、クリックで編集。実績があれば実績を、なければ予定を動かす
       const usesAct = !!e.site.act[e.phaseIdx];
       el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"phase",id:e.site.id,phaseIdx:e.phaseIdx,useAct:usesAct,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
         const s=sites.find(x=>x.id===e.site.id); const i=e.phaseIdx; closeSpanEditor();
@@ -1213,7 +1242,7 @@ function wireCalendar(grid){
     el.addEventListener("pointerdown",(ev)=>{ if(!isPhone()){ ev.preventDefault(); ev.stopPropagation(); } startDrag(el,ev,{type:"extra",id:e.site.id,field,label:el.textContent,bg:e.color.done,fg:"#fff",onClick:()=>{
       const s=sites.find(x=>x.id===e.site.id); closeSpanEditor();
       let opts={}; if(field==="keyChange"&&s.plan[3]) opts.min=dateAdd(s.plan[3],1);
-      openDateInline(el,s[field].done,v=>{ if(field==="keyChange"&&v&&s.plan[3]&&v<=s.plan[3]){ alert(`鍵交換の実施日は、④工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return; } s[field].done=v; refresh(); }, opts);
+      openDateInline(el,s[field].done,v=>{ if(field==="keyChange"&&v&&s.plan[3]&&v<=s.plan[3]){ alert(`鍵交換の実施日は、⑤工事の予定日（${fmt(s.plan[3])}）より後の日付にしてください。`); return; } s[field].done=v; refresh(); }, opts);
     }}); });
   });
 
@@ -1464,10 +1493,10 @@ function latestWorkDate(s){
   if(!ds.length) return null;
   ds.sort(); return ds[ds.length-1];
 }
-// ④予定(plan[3])を最終工事日に自動同期
+// ⑤予定(plan[3])を最終工事日に自動同期
 function syncPhase5(s){ const d=latestWorkDate(s); if(d) s.plan[3]=d; }
 function syncAllPhase5(){ sites.forEach(syncPhase5); }
-// ⑤完了チェック(実績)が④最終工事日より前か（警告色の判定に使用）
+// ⑥完了チェック(実績)が⑤最終工事日より前か（警告色の判定に使用）
 function phase6IsPast(s){
   const last=s.plan[3]; if(!last) return false;
   if(s.act[4] && s.act[4]<last) return true;
@@ -1507,6 +1536,7 @@ function normalizeSite(raw){
   if(!s.moveinClean||typeof s.moveinClean!=="object") s.moveinClean={order:null,done:null};
   if(!s.keyChange||typeof s.keyChange!=="object") s.keyChange={order:null,done:null};
   if(s.mtgEndTime===undefined) s.mtgEndTime=null;
+  if(!s.cancelDate||typeof s.cancelDate!=="string") s.cancelDate=null;
   if(s.attendee===undefined) s.attendee=null;
   if(s.survey===undefined) s.survey=false;
   if(s.memo===undefined) s.memo="";
@@ -2160,6 +2190,54 @@ document.getElementById("pdfbtn").onclick=buildPdf;
 document.getElementById("zeroholbtn").onclick=openZeroHolidayModal;
 document.getElementById("addbtn").onclick=openNewSiteModal;
 function openNewSiteModal(){ openSiteModal(null); }
+// 解約日のカレンダー選択。値なしなら翌月を初期表示、値ありならその月を表示
+function fmtFullDate(k){ if(!k) return ""; const d=parseISO(k); return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日(${["日","月","火","水","木","金","土"][d.getDay()]})`; }
+function openCancelPicker(cur,cb){
+  const old=document.getElementById("cancelpickmodal"); if(old) old.remove();
+  const now=new Date();
+  const base = cur ? parseISO(cur) : new Date(now.getFullYear(), now.getMonth()+1, 1);
+  let viewY=base.getFullYear(), viewM=base.getMonth();
+  const ov=document.createElement("div");
+  ov.id="cancelpickmodal";
+  ov.style.cssText="position:fixed; inset:0; z-index:12000; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;";
+  ov.innerHTML=`<div style="background:var(--surface-2); border-radius:12px; padding:18px; width:320px; max-width:94vw; box-shadow:0 10px 40px rgba(0,0,0,.25);">
+    <div style="font-size:15px; font-weight:600; margin-bottom:10px;">解約日を選択</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <button type="button" id="cpPrev" style="font-size:13px; padding:3px 10px;">‹</button>
+      <span id="cpLabel" style="font-size:14px; font-weight:500;"></span>
+      <button type="button" id="cpNext" style="font-size:13px; padding:3px 10px;">›</button>
+    </div>
+    <div id="cpGrid"></div>
+    <div style="display:flex; gap:8px; justify-content:space-between; margin-top:14px;">
+      <button type="button" id="cpClear" style="font-size:13px; padding:6px 14px;">クリア</button>
+      <button type="button" id="cpCancel" style="font-size:13px; padding:6px 14px;">キャンセル</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector("#cpCancel").onclick=close;
+  ov.querySelector("#cpClear").onclick=()=>{ close(); cb(null); };
+  const wd=["日","月","火","水","木","金","土"];
+  const draw=()=>{
+    ov.querySelector("#cpLabel").textContent=`${viewY}年${viewM+1}月`;
+    const firstDow=new Date(viewY,viewM,1).getDay();
+    const ndays=new Date(viewY,viewM+1,0).getDate();
+    let cells=wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("");
+    for(let i=0;i<firstDow;i++) cells+=`<div></div>`;
+    for(let d=1;d<=ndays;d++){
+      const k=iso(viewY,viewM,d); const on=(k===cur); const hol=holidayName(k);
+      const dow=new Date(viewY,viewM,d).getDay();
+      const col=on?'#fff':(hol||dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-primary)');
+      cells+=`<div data-ck="${k}" title="${hol||''}" style="text-align:center; font-size:13px; padding:7px 0; border-radius:6px; cursor:pointer; background:${on?'var(--text-accent)':'transparent'}; color:${col}; font-weight:${on?'600':'400'};">${d}</div>`;
+    }
+    const g=ov.querySelector("#cpGrid");
+    g.innerHTML=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px;">${cells}</div>`;
+    g.querySelectorAll("[data-ck]").forEach(el=>el.addEventListener("click",()=>{ const k=el.dataset.ck; close(); cb(k); }));
+  };
+  ov.querySelector("#cpPrev").onclick=()=>{ viewM--; if(viewM<0){viewM=11;viewY--;} draw(); };
+  ov.querySelector("#cpNext").onclick=()=>{ viewM++; if(viewM>11){viewM=0;viewY++;} draw(); };
+  draw();
+}
 function openEditSiteModal(id){ const s=sites.find(x=>x.id===id); if(s) openSiteModal(s); }
 function openSiteModal(editSite){
   const isEdit=!!editSite;
@@ -2182,7 +2260,12 @@ function openSiteModal(editSite){
     <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:10px;">マンション名（物件マスタから選択）
       <select id="nsNameSel" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:14px; padding:6px 8px;">${nameOptions}</select></label>
     <input type="text" id="nsName" value="${(isEdit&&!inMaster)?curName.replace(/"/g,'&quot;'):''}" placeholder="マンション名を手入力" style="width:100%; box-sizing:border-box; margin-bottom:10px; font-size:14px; padding:6px 8px;">
-    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:16px;">号室<input type="text" id="nsRoom" value="${isEdit?String(editSite.room).replace(/"/g,'&quot;'):''}" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:14px; padding:6px 8px;"></label>
+    <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:10px;">号室<input type="text" id="nsRoom" value="${isEdit?String(editSite.room).replace(/"/g,'&quot;'):''}" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:14px; padding:6px 8px;"></label>
+    <div style="font-size:12px; color:var(--text-secondary); margin-bottom:16px;">解約日
+      <div style="display:flex; gap:6px; margin-top:4px;">
+        <button type="button" id="nsCancelBtn" style="flex:1; text-align:left; font-size:14px; padding:6px 8px;"></button>
+        <button type="button" id="nsCancelClr" style="font-size:12px; padding:6px 10px;">クリア</button>
+      </div></div>
     ${isEdit&&editSite.category==="三井"?'':`<div style="font-size:11px; color:var(--text-warning); margin-bottom:12px; ${isEdit?'':'display:none;'}"><i class="ti ti-alert-triangle" aria-hidden="true" style="font-size:12px; vertical-align:-1px;"></i> 区分を変更すると使用する工程が変わります。</div>`}
     <div style="display:flex; gap:8px; justify-content:flex-end;">
       <button id="nsCancel" style="font-size:13px; padding:6px 14px;">キャンセル</button>
@@ -2197,6 +2280,12 @@ function openSiteModal(editSite){
   sel.addEventListener("change",syncFree);
   free.style.display = (sel.value==="__free__") ? "" : "none"; // 初期状態：「その他」選択中なら手入力欄を表示
   const getName=()=> sel.value==="__free__" ? free.value.trim() : sel.value;
+  let cancelVal = isEdit ? (editSite.cancelDate||null) : null; // 解約日（カレンダー選択。初期表示は翌月）
+  const cBtn=ov.querySelector("#nsCancelBtn");
+  const drawCancel=()=>{ cBtn.innerHTML = cancelVal ? fmtFullDate(cancelVal) : '<span style="color:var(--text-muted);">カレンダーから選択</span>'; };
+  drawCancel();
+  cBtn.onclick=()=>openCancelPicker(cancelVal,(v)=>{ cancelVal=v; drawCancel(); });
+  ov.querySelector("#nsCancelClr").onclick=()=>{ cancelVal=null; drawCancel(); };
   if(sel.value==="__free__") free.focus(); else sel.focus();
   free.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ov.querySelector("#nsRoom").focus(); } });
   ov.querySelector("#nsRoom").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ov.querySelector("#nsOk").click(); } });
@@ -2206,11 +2295,11 @@ function openSiteModal(editSite){
     const c=ov.querySelector('input[name="nscat"]:checked').value;
     // 手入力した新しい物件名はマスタに自動登録
     if(sel.value==="__free__" && name && !buildingMaster.includes(name)) buildingMaster.push(name);
-    if(isEdit){ editSite.name=name; editSite.room=room; editSite.category=c; }
+    if(isEdit){ editSite.name=name; editSite.room=room; editSite.category=c; editSite.cancelDate=cancelVal; }
     else {
       const dup=sites.some(x=>x.name===name && String(x.room).trim()===room);
       if(dup && !confirm("すでに同じ号室の登録がありますが登録してよろしいですか？")) return;
-      sites.push(newSite(nextId++,name,room,c));
+      const ns=newSite(nextId++,name,room,c); ns.cancelDate=cancelVal; sites.push(ns);
     }
     matrixCat=c; // 登録・編集した現場が見えるよう、その区分のタブへ切り替え
     close(); refresh();
@@ -2222,7 +2311,7 @@ let bootRendered=false;
 let dataLoaded=false; // 実データ(またはローカル試用)が確定したか。未確定のうちは保存を抑止しダミー流出を防ぐ
 function bootRender(){ if(bootRendered) return; bootRendered=true; renderStats(); renderBody(); renderCalendar(); }
 function showBootLoading(){
-  const tb=document.getElementById("tbody"); if(tb) tb.innerHTML=`<tr><td colspan="14" style="padding:2rem; text-align:center; color:var(--text-muted);">共有データを読み込み中…</td></tr>`;
+  const tb=document.getElementById("tbody"); if(tb) tb.innerHTML=`<tr><td colspan="15" style="padding:2rem; text-align:center; color:var(--text-muted);">共有データを読み込み中…</td></tr>`;
   const cg=document.getElementById("calgrid"); if(cg) cg.innerHTML=`<div style="padding:2rem; text-align:center; color:var(--text-muted);">共有データを読み込み中…</div>`;
 }
 // 読込できなかった時：サンプル(ダミー)は絶対に出さず、空表示にする
@@ -2230,7 +2319,7 @@ function showBootEmpty(msg, emptySheet){
   bootRendered=true; // サンプル描画を今後も抑止
   sites=[];          // ダミーを保持しない
   if(emptySheet){ dataLoaded=true; } // 本当に空のシートのみ、新規入力→保存を許可
-  const tb=document.getElementById("tbody"); if(tb) tb.innerHTML=`<tr><td colspan="14" style="padding:2rem; text-align:center; color:var(--text-muted);">${msg||"データを表示できません。"}</td></tr>`;
+  const tb=document.getElementById("tbody"); if(tb) tb.innerHTML=`<tr><td colspan="15" style="padding:2rem; text-align:center; color:var(--text-muted);">${msg||"データを表示できません。"}</td></tr>`;
   const cg=document.getElementById("calgrid"); if(cg) cg.innerHTML=`<div style="padding:2rem; text-align:center; color:var(--text-muted);">${msg||"データを表示できません。"}</div>`;
   const ua=document.getElementById("unassigned"); if(ua) ua.innerHTML="";
 }
