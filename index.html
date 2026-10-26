@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v82</title>
+<title>リフォーム進捗管理アプリ v83</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -2223,13 +2223,19 @@ function openCancelPicker(cur,cb){
     const firstDow=new Date(viewY,viewM,1).getDay();
     const ndays=new Date(viewY,viewM+1,0).getDate();
     let cells=wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("");
-    for(let i=0;i<firstDow;i++) cells+=`<div></div>`;
-    for(let d=1;d<=ndays;d++){
-      const k=iso(viewY,viewM,d); const on=(k===cur); const hol=holidayName(k);
-      const dow=new Date(viewY,viewM,d).getDay();
+    // 前月・翌月の日付も薄く表示し、選択可能にする（最初の行の1日より前／最終行の月末より後）
+    const cell=(y,m,d,other)=>{
+      const k=iso(y,m,d); const on=(k===cur); const hol=holidayName(k);
+      const dow=new Date(y,m,d).getDay();
       const col=on?'#fff':(hol||dow===0?'var(--text-danger)':dow===6?'var(--text-accent)':'var(--text-primary)');
-      cells+=`<div data-ck="${k}" title="${hol||''}" style="text-align:center; font-size:13px; padding:7px 0; border-radius:6px; cursor:pointer; background:${on?'var(--text-accent)':'transparent'}; color:${col}; font-weight:${on?'600':'400'};">${d}</div>`;
-    }
+      return `<div data-ck="${k}" title="${hol||''}" style="text-align:center; font-size:13px; padding:7px 0; border-radius:6px; cursor:pointer; background:${on?'var(--text-accent)':'transparent'}; color:${col}; font-weight:${on?'600':'400'}; opacity:${other&&!on?'.4':'1'};">${d}</div>`;
+    };
+    const pm=new Date(viewY,viewM,0); // 前月末日
+    for(let i=firstDow-1;i>=0;i--) cells+=cell(pm.getFullYear(),pm.getMonth(),pm.getDate()-i,true);
+    for(let d=1;d<=ndays;d++) cells+=cell(viewY,viewM,d,false);
+    const lastDow=new Date(viewY,viewM,ndays).getDay();
+    const nm=new Date(viewY,viewM+1,1);
+    for(let d=1;d<=6-lastDow;d++) cells+=cell(nm.getFullYear(),nm.getMonth(),d,true);
     const g=ov.querySelector("#cpGrid");
     g.innerHTML=`<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px;">${cells}</div>`;
     g.querySelectorAll("[data-ck]").forEach(el=>el.addEventListener("click",()=>{ const k=el.dataset.ck; close(); cb(k); }));
