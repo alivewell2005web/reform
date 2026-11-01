@@ -209,13 +209,19 @@ function newSite(id,name,room,category){return {id,name,room,category:category||
   memo:"" };}          // 進捗表右端のフリーメモ
 const BILL_OPTS=["デザイン","ウエル","レジデンシャル"];
 const FURN_OPTS=["なし","あり"];
-const AUTOLOCK_PRESETS=["呼5100","※1234呼"];   // 加えてフリー入力（空欄デフォルト）
-const NOTE_PRESETS=["当社","オープン","電気メーター","水道メーター","南京5100"]; // 加えてフリー入力（空欄デフォルト）
+const AUTOLOCK_DEFAULTS=["呼5100","※1234呼"];
+let autolockMaster=AUTOLOCK_DEFAULTS.slice();   // 選択肢（保存データに含む。フリー入力で自動追加）
+const NOTE_DEFAULTS=["当社","オープン","電気メーター","水道メーター","南京5100"];
+let noteMaster=NOTE_DEFAULTS.slice(); // 選択肢（保存データに含む。フリー入力で自動追加）
+function presetList(field){ return field==="autolock"?autolockMaster:noteMaster; }
+// フリー入力した値を選択肢へ自動追加（空・重複は除く）。追加したらtrue
+function addPresetIfNew(field,val){ const v=(val||"").trim(); const list=presetList(field); if(!v||list.includes(v)) return false; list.push(v); return true; }
 // ZERO（クリーニング業者）の休業日。日付キー("YYYY-MM-DD")のSet。現場名/ZERO/アルファ&ZERO 絞り込み時にカレンダー表示。
 let zeroHolidays=new Set();
 let sites=[];
 let nextId=1;
 let calAnchor=new Date(TODAY);
+let calCat="all"; // カレンダーの区分絞り込み（"all" / "三井"）。calSite==="all"のときのみ有効
 let calView="month", calSite="all", calWork="all", calVendor="all", weekFromToday=true;
 let sortKey="cancel"; // created(登録順) | phase | cancel(解約日→現場名→部屋番号) | name(現場名→部屋番号) | date1　※既定は解約日順
 let sortAsc=true; // 昇順=true / 降順=false
@@ -636,7 +642,7 @@ function presetOrFreeHtml(kind,cur,presets){
   const isPreset=presets.includes(cur);
   const sel=`<select data-preset="${kind}" style="width:auto; min-width:96px; font-size:11px; padding:2px 6px;">`+
     `<option value="__free__"${!isPreset?' selected':''}>フリー入力</option>`+
-    presets.map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join("")+`</select>`;
+    presets.map(o=>`<option value="${escapeHtml(o)}"${o===cur?' selected':''}>${escapeHtml(o)}</option>`).join("")+`</select>`;
   const free=`<input type="text" data-free="${kind}" value="${isPreset?'':(cur||'').replace(/"/g,'&quot;')}" placeholder="（空欄可）" style="width:96px; font-size:11px; padding:2px 5px; ${isPreset?'display:none;':''}">`;
   return `<span style="display:inline-flex; gap:4px; align-items:center;">${sel}${free}</span>`;
 }
@@ -690,8 +696,8 @@ function renderDetailInto(s, d){
           <label style="display:inline-flex; align-items:center; gap:4px;">清掃費 ${moneyInputHtml(`data-fee="${s.id}:cleanFee"`,wk.cleanFee)}</label>
           <label style="display:inline-flex; align-items:center; gap:4px;">エアコン ${moneyInputHtml(`data-fee="${s.id}:acFee"`,wk.acFee)}</label>
           <label style="display:inline-flex; align-items:center; gap:4px;">剥離 ${moneyInputHtml(`data-fee="${s.id}:peelFee"`,wk.peelFee)}</label>
-          <label style="display:inline-flex; align-items:center; gap:4px;">オートロック ${presetOrFreeHtml(`${s.id}:autolock`,s.autolock,AUTOLOCK_PRESETS)}</label>
-          <label style="display:inline-flex; align-items:center; gap:4px;">備考 ${presetOrFreeHtml(`${s.id}:note`,s.note,NOTE_PRESETS)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">オートロック ${presetOrFreeHtml(`${s.id}:autolock`,s.autolock,autolockMaster)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">備考 ${presetOrFreeHtml(`${s.id}:note`,s.note,noteMaster)}</label>
           </div></td></tr>`;
       }
     }
@@ -733,7 +739,9 @@ function renderDetailInto(s, d){
     if(el.value==="__free__"){ if(free){ free.style.display=""; s2[field]=free.value.trim(); free.focus(); } }
     else { if(free) free.style.display="none"; s2[field]=el.value; }
   }); });
-  d.querySelectorAll("input[data-free]").forEach(el=>{ el.addEventListener("input",()=>{ const [id,field]=el.dataset.free.split(":"); const s2=sites.find(x=>x.id===Number(id)); s2[field]=el.value.trim(); }); });
+  d.querySelectorAll("input[data-free]").forEach(el=>{ el.addEventListener("input",()=>{ const [id,field]=el.dataset.free.split(":"); const s2=sites.find(x=>x.id===Number(id)); s2[field]=el.value.trim(); });
+    // 入力確定時（フォーカスが外れた/Enter）に選択肢へ自動追加。再描画せず、次回表示から反映
+    el.addEventListener("change",()=>{ const [id,field]=el.dataset.free.split(":"); if(addPresetIfNew(field,el.value)){ dirty=true; scheduleAutoSave(); } }); });
 }
 
 function daysInPeriod(){
@@ -751,7 +759,7 @@ function daysInPeriod(){
 function monthGridStart(){ const d=new Date(calAnchor); const dow=d.getDay(); const s=new Date(d); s.setDate(d.getDate()-dow); s.setHours(0,0,0,0); return s; }
 // 既定アンカー：今日の1週間前（→今日を含む週が6週グリッドの2段目になる）
 function calDefaultAnchor(){ const d=new Date(TODAY); d.setDate(d.getDate()-7); return d; }
-function sitematch(s){ return calSite==="all"||s.id===Number(calSite); }
+function sitematch(s){ if(calSite!=="all") return s.id===Number(calSite); return calCat==="all"||s.category===calCat; }
 // カレンダーの業者フィルタ判定（all / アルファ&ZERO複合 / 単一業者）
 function vendorMatch(v){ if(calVendor==="all") return true; if(calVendor===VENDOR_AZ) return AZ_VENDORS.includes(v); return v===calVendor; }
 // 業者フィルタが「特定業者に絞られている」か（all以外＝立会/清掃/鍵の非業者チップは出さない、の判定に使用）
@@ -949,7 +957,7 @@ function renderCalendar(){
   // 選択中の現場が表示対象外でも選択肢には残す（表示が空になっても選択状態を保持）
   let optSites=inView.slice();
   if(calSite!=="all" && !optSites.some(s=>String(s.id)===String(calSite))){ const cur=sites.find(s=>String(s.id)===String(calSite)); if(cur) optSites.unshift(cur); }
-  sitesel.innerHTML=`<option value="all">すべての現場</option>`+optSites.map(s=>`<option value="${s.id}"${String(calSite)===String(s.id)?' selected':''}>${s.name} ${s.room}号室</option>`).join("");
+  sitesel.innerHTML=`<option value="all">すべての現場</option><option value="__mitsui__"${(calSite==="all"&&calCat==="三井")?' selected':''}>三井のすべての現場</option>`+optSites.map(s=>`<option value="${s.id}"${String(calSite)===String(s.id)?' selected':''}>${s.name} ${s.room}号室</option>`).join("");
   const sel=document.getElementById("worksel");
   if(!sel.dataset.init){sel.innerHTML=`<option value="all">すべての工事</option>`+WORKS.map(w=>`<option value="${w}"${w===calWork?' selected':''}>${w}</option>`).join("")+`<option value="${EXTRA_MTG.key}"${calWork===EXTRA_MTG.key?' selected':''}>${EXTRA_MTG.key}</option><option value="${EXTRA_MOVEIN.key}"${calWork===EXTRA_MOVEIN.key?' selected':''}>${EXTRA_MOVEIN.key}</option><option value="${EXTRA_KEY.key}"${calWork===EXTRA_KEY.key?' selected':''}>${EXTRA_KEY.key}</option>`; sel.dataset.init="1";}
   const vsel=document.getElementById("vendorsel");
@@ -1522,7 +1530,7 @@ let saving=false, pendingSave=false;
 let dirty=false; // 未保存のローカル変更がある間はtrue（自動取込を止める）
 
 function serializeData(){
-  return JSON.stringify({ v:SCHEMA_VERSION, savedAt:new Date().toISOString(), nextId, vendorMaster, buildingMaster, zeroHolidays:[...zeroHolidays], sites });
+  return JSON.stringify({ v:SCHEMA_VERSION, savedAt:new Date().toISOString(), nextId, vendorMaster, buildingMaster, autolockMaster, noteMaster, zeroHolidays:[...zeroHolidays], sites });
 }
 function normalizeSite(raw){
   const s=Object.assign(newSite(raw.id,raw.name,raw.room,raw.category), raw, {open:false});
@@ -1547,6 +1555,10 @@ function applyData(obj){
   sites = obj.sites.map(normalizeSite);
   if(Array.isArray(obj.vendorMaster)&&obj.vendorMaster.length) vendorMaster=obj.vendorMaster;
   if(Array.isArray(obj.buildingMaster)) buildingMaster=obj.buildingMaster;
+  // 既存データ（マスタ未保存）は初期値＋各現場に入力済みの値から復元
+  autolockMaster=Array.isArray(obj.autolockMaster)?obj.autolockMaster:AUTOLOCK_DEFAULTS.slice();
+  noteMaster=Array.isArray(obj.noteMaster)?obj.noteMaster:NOTE_DEFAULTS.slice();
+  if(!Array.isArray(obj.autolockMaster)||!Array.isArray(obj.noteMaster)) sites.forEach(s=>{ if(!Array.isArray(obj.autolockMaster)) addPresetIfNew("autolock",s.autolock); if(!Array.isArray(obj.noteMaster)) addPresetIfNew("note",s.note); });
   zeroHolidays = new Set(Array.isArray(obj.zeroHolidays)?obj.zeroHolidays:[]);
   if(typeof obj.nextId==="number") nextId=obj.nextId;
   hankakuizeAll();
@@ -1712,6 +1724,16 @@ function openSettings(){
         <button id="bmAdd" style="font-size:13px; padding:6px 14px;">追加</button>
       </div>
     </div>
+    <div style="border-top:0.5px solid var(--border); padding-top:14px; margin-bottom:14px;">
+      <div style="font-size:13px; font-weight:600; margin-bottom:8px;">オートロック・備考の選択肢</div>
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">現場詳細で「フリー入力」した内容は自動でここに追加されます。不要なものは削除してください（入力済みの現場の値は消えません）。</div>
+      <div style="font-size:12px; font-weight:600; margin:6px 0 4px;">オートロック</div>
+      <div id="alList" style="display:flex; flex-direction:column; gap:4px; max-height:140px; overflow:auto; margin-bottom:6px;"></div>
+      <div style="display:flex; gap:6px; margin-bottom:10px;"><input type="text" id="alNew" placeholder="選択肢を追加" style="flex:1; box-sizing:border-box; font-size:13px; padding:6px 8px;"><button id="alAdd" style="font-size:13px; padding:6px 14px;">追加</button></div>
+      <div style="font-size:12px; font-weight:600; margin:6px 0 4px;">備考</div>
+      <div id="ntList" style="display:flex; flex-direction:column; gap:4px; max-height:140px; overflow:auto; margin-bottom:6px;"></div>
+      <div style="display:flex; gap:6px;"><input type="text" id="ntNew" placeholder="選択肢を追加" style="flex:1; box-sizing:border-box; font-size:13px; padding:6px 8px;"><button id="ntAdd" style="font-size:13px; padding:6px 14px;">追加</button></div>
+    </div>
     <div style="display:flex; gap:8px; justify-content:flex-end;">
       <button id="stCancel" style="font-size:13px; padding:6px 14px;">キャンセル</button>
       <button id="stSave" style="font-size:13px; padding:6px 16px; background:var(--text-accent); color:#fff; border-color:var(--text-accent);">保存して接続</button>
@@ -1731,6 +1753,19 @@ function openSettings(){
   const bmAdd=()=>{ const inp=ov.querySelector("#bmNew"); const v=inp.value.trim(); if(v&&!buildingMaster.includes(v)){ buildingMaster.push(v); dirty=true; scheduleAutoSave(); } inp.value=""; inp.focus(); renderBmList(); };
   ov.querySelector("#bmAdd").onclick=bmAdd;
   ov.querySelector("#bmNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); bmAdd(); } });
+  // オートロック・備考の選択肢管理
+  const setupPresetMgr=(field,listId,newId,addId)=>{
+    const list=presetList(field);
+    const render=()=>{ const box=ov.querySelector(listId);
+      box.innerHTML = list.length ? list.map((b,i)=>`<div style="display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 6px; background:var(--surface-1); border-radius:6px;"><span style="flex:1;">${escapeHtml(b)}</span><button data-pdel="${i}" style="font-size:11px; padding:1px 8px;">削除</button></div>`).join("") : `<div style="font-size:12px; color:var(--text-muted);">未登録</div>`;
+      box.querySelectorAll("[data-pdel]").forEach(el=>el.addEventListener("click",()=>{ list.splice(Number(el.dataset.pdel),1); dirty=true; scheduleAutoSave(); render(); renderBody(); renderCalendar(); })); };
+    render();
+    const add=()=>{ const inp=ov.querySelector(newId); if(addPresetIfNew(field,inp.value)){ dirty=true; scheduleAutoSave(); } inp.value=""; inp.focus(); render(); };
+    ov.querySelector(addId).onclick=add;
+    ov.querySelector(newId).addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } });
+  };
+  setupPresetMgr("autolock","#alList","#alNew","#alAdd");
+  setupPresetMgr("note","#ntList","#ntNew","#ntAdd");
   ov.querySelector("#stSave").onclick=()=>{
     const u=ov.querySelector("#gasUrlInput").value.trim();
     const t=ov.querySelector("#gasTokenInput").value.trim();
@@ -2132,7 +2167,7 @@ document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   document.getElementById("tab-calendar").style.display=(t==="calendar")?"flex":"none";
   if(t==="matrix") sizeMatrixScroll();
 }));
-document.getElementById("sitesel").addEventListener("change",e=>{closeSpanEditor(); calSite=e.target.value; renderCalendar();});
+document.getElementById("sitesel").addEventListener("change",e=>{closeSpanEditor(); const v=e.target.value; if(v==="__mitsui__"){ calSite="all"; calCat="三井"; } else { calSite=v; calCat="all"; } renderCalendar();});
 document.getElementById("worksel").addEventListener("change",e=>{closeSpanEditor(); calWork=e.target.value; renderCalendar();});
 document.getElementById("vendorsel").addEventListener("change",e=>{closeSpanEditor(); calVendor=e.target.value; renderCalendar();});
 // 週送り（両ビュー共通、±7日スライド）
