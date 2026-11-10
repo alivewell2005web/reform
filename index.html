@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v86</title>
+<title>リフォーム進捗管理アプリ v87</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -1131,6 +1131,18 @@ function renderCalendarFlow(spans, days){
 }
 
 // 描画後にチップの実高さを測って再レイアウト（折返し行数の推定ズレによる「マスからはみ出し」防止）
+// カレンダー幅が変わったとき（画面リサイズ・スクロールバー出現など）は実測し直す
+(function(){
+  let lastW=0, raf=0;
+  function setup(){
+    const g=document.getElementById("calgrid"); if(!g||typeof ResizeObserver==="undefined") return;
+    new ResizeObserver(()=>{
+      const w=g.clientWidth; if(!w||Math.abs(w-lastW)<1) return; lastW=w;
+      cancelAnimationFrame(raf); raf=requestAnimationFrame(()=>{ if(g.offsetParent!==null) renderCalendar(); });
+    }).observe(g);
+  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",setup); else setup();
+})();
 function renderCalendarLanes(spans, days, groupBySite){
   renderCalendarLanesCore(spans, days, groupBySite, null);
   const grid=document.getElementById("calgrid"); if(!grid) return;
@@ -1164,7 +1176,7 @@ function renderCalendarLanesCore(spans, days, groupBySite, hmap){
   const gridW=(document.getElementById("calgrid")||{}).clientWidth||840;
   const colPx=scrollX ? COLMIN : gridW/7;
   const chipInnerPx=Math.max(28, colPx-8-10);
-  const CHAR_PX=9, LH=12, VPAD=2;
+  const CHAR_PX=7, LH=12, VPAD=2;
   const estLines=(txt)=>{ const s=String(txt||""); const perLine=Math.max(3, Math.floor(chipInnerPx/CHAR_PX)); return Math.max(1, Math.ceil([...s].length/perLine)); };
   const MINH=LH+VPAD;
   let weeksHtml="";
@@ -2214,6 +2226,7 @@ document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{
   document.getElementById("tab-matrix").style.display=(t==="matrix")?"flex":"none";
   document.getElementById("tab-calendar").style.display=(t==="calendar")?"flex":"none";
   if(t==="matrix") sizeMatrixScroll();
+  if(t==="calendar") renderCalendar(); // 非表示中に描画した分の高さ実測をやり直す
 }));
 document.getElementById("sitesel").addEventListener("change",e=>{closeSpanEditor(); const v=e.target.value; if(v==="__mitsui__"){ calSite="all"; calCat="三井"; } else { calSite=v; calCat="all"; } renderCalendar();});
 document.getElementById("worksel").addEventListener("change",e=>{closeSpanEditor(); calWork=e.target.value; renderCalendar();});
