@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v84</title>
+<title>リフォーム進捗管理アプリ v85</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -205,7 +205,8 @@ function newSite(id,name,room,category){return {id,name,room,category:category||
   billTo:"デザイン",     // 請求先（デザイン/ウエル/レジデンシャル）
   furniture:"なし",      // 家具有無（あり/なし）
   autolock:"",           // オートロック（呼5100 / ※1234呼 / フリー入力）
-  note:"",             // 備考（当社/オープン/電気メーター/水道メーター/南京5100 / フリー入力）
+  note:"",             // 備考①（当社/オープン/電気メーター/水道メーター/南京5100 / フリー入力）
+  note2:"",            // 備考②（完全フリー入力）
   memo:"" };}          // 進捗表右端のフリーメモ
 const BILL_OPTS=["デザイン","ウエル","レジデンシャル"];
 const FURN_OPTS=["なし","あり"];
@@ -697,7 +698,8 @@ function renderDetailInto(s, d){
           <label style="display:inline-flex; align-items:center; gap:4px;">エアコン ${moneyInputHtml(`data-fee="${s.id}:acFee"`,wk.acFee)}</label>
           <label style="display:inline-flex; align-items:center; gap:4px;">剥離 ${moneyInputHtml(`data-fee="${s.id}:peelFee"`,wk.peelFee)}</label>
           <label style="display:inline-flex; align-items:center; gap:4px;">オートロック ${presetOrFreeHtml(`${s.id}:autolock`,s.autolock,autolockMaster)}</label>
-          <label style="display:inline-flex; align-items:center; gap:4px;">備考 ${presetOrFreeHtml(`${s.id}:note`,s.note,noteMaster)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">備考① ${presetOrFreeHtml(`${s.id}:note`,s.note,noteMaster)}</label>
+          <label style="display:inline-flex; align-items:center; gap:4px;">備考② <input type="text" data-note2="${s.id}" value="${escapeHtml(s.note2||'')}" placeholder="（自由入力）" style="width:200px; font-size:11px; padding:2px 5px;"></label>
           </div></td></tr>`;
       }
     }
@@ -739,6 +741,7 @@ function renderDetailInto(s, d){
     if(el.value==="__free__"){ if(free){ free.style.display=""; s2[field]=free.value.trim(); free.focus(); } }
     else { if(free) free.style.display="none"; s2[field]=el.value; }
   }); });
+  d.querySelectorAll("input[data-note2]").forEach(el=>{ el.addEventListener("input",()=>{ const s2=sites.find(x=>x.id===Number(el.dataset.note2)); if(s2){ s2.note2=el.value; dirty=true; scheduleAutoSave(); } }); });
   d.querySelectorAll("input[data-free]").forEach(el=>{ el.addEventListener("input",()=>{ const [id,field]=el.dataset.free.split(":"); const s2=sites.find(x=>x.id===Number(id)); s2[field]=el.value.trim(); });
     // 入力確定時（フォーカスが外れた/Enter）に選択肢へ自動追加。再描画せず、次回表示から反映
     el.addEventListener("change",()=>{ const [id,field]=el.dataset.free.split(":"); if(addPresetIfNew(field,el.value)){ dirty=true; scheduleAutoSave(); } }); });
@@ -1579,6 +1582,7 @@ function normalizeSite(raw){
   if(s.attendee===undefined) s.attendee=null;
   if(s.survey===undefined) s.survey=false;
   if(s.memo===undefined) s.memo="";
+  if(typeof s.note2!=="string") s.note2="";
   return s;
 }
 function applyData(obj){
@@ -2071,7 +2075,7 @@ function buildPdfCore(vendor, days, perLabel, inMonth){
           <td style="padding:4px 6px; border:0.5px solid #ccc; white-space:nowrap;">${escapeHtml(s.billTo||"")}</td>
           <td style="padding:4px 4px; border:0.5px solid #ccc; text-align:center;">${furn}</td>${moneyCells}
           <td style="padding:4px 6px; border:0.5px solid #ccc; word-break:break-all;">${escapeHtml(s.autolock||"")}</td>
-          <td style="padding:4px 6px; border:0.5px solid #ccc; white-space:pre-wrap; word-break:break-all;">${escapeHtml(s.note||"")}</td>
+          <td style="padding:4px 6px; border:0.5px solid #ccc; white-space:pre-wrap; word-break:break-all;">${escapeHtml(s.note||"")}${(s.note&&s.note2)?'<span style="display:inline-block; width:1.5em;"></span>':''}${escapeHtml(s.note2||"")}</td>
         </tr>`;
       });
       // 合計・総合計行は最終ページ、金額列表示時のみ
