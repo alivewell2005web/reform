@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v85</title>
+<title>リフォーム進捗管理アプリ v86</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -1130,7 +1130,15 @@ function renderCalendarFlow(spans, days){
   wireCalendar(grid);
 }
 
+// 描画後にチップの実高さを測って再レイアウト（折返し行数の推定ズレによる「マスからはみ出し」防止）
 function renderCalendarLanes(spans, days, groupBySite){
+  renderCalendarLanesCore(spans, days, groupBySite, null);
+  const grid=document.getElementById("calgrid"); if(!grid) return;
+  const hmap={}; let any=false;
+  grid.querySelectorAll("[data-hk]").forEach(el=>{ const h=el.offsetHeight; if(h>0){ hmap[el.dataset.hk]=h; any=true; } });
+  if(any) renderCalendarLanesCore(spans, days, groupBySite, hmap);
+}
+function renderCalendarLanesCore(spans, days, groupBySite, hmap){
   const keyOf=dt=>iso(dt.getFullYear(),dt.getMonth(),dt.getDate());
   const tKey=todayKey();
   let weeks=[];
@@ -1151,22 +1159,21 @@ function renderCalendarLanes(spans, days, groupBySite){
     headRow=`<div style="display:grid; ${GTC} gap:4px; margin-bottom:4px;">`+wd.map((d,i)=>`<div style="text-align:center; font-size:11px; color:${i===0?'var(--text-danger)':i===6?'var(--text-accent)':'var(--text-secondary)'};">${d}</div>`).join("")+`</div>`;
   }
 
-  const colW=100/7, topPad=26;
-  // チップ内の折返し行数を列幅から推定（可変高）。スマホ縦は最低列幅で計算
+  const colW=100/7;
+  // チップ高さ：初回は列幅から推定、描画後に実測値(hmap)で再レイアウトして「はみ出し」を無くす
   const gridW=(document.getElementById("calgrid")||{}).clientWidth||840;
   const colPx=scrollX ? COLMIN : gridW/7;
   const chipInnerPx=Math.max(28, colPx-8-10);
-  const CHAR_PX=6.4, LH=14, VPAD=6;
+  const CHAR_PX=9, LH=12, VPAD=2;
   const estLines=(txt)=>{ const s=String(txt||""); const perLine=Math.max(3, Math.floor(chipInnerPx/CHAR_PX)); return Math.max(1, Math.ceil([...s].length/perLine)); };
-  const itemH=(txt)=> estLines(txt)*LH+VPAD;       // チップ高さ(px)
+  const MINH=LH+VPAD;
   let weeksHtml="";
-  weeks.forEach(week=>{
+  weeks.forEach((week,wi)=>{
     const weekKeys=week.map(dt=>dt?keyOf(dt):null);
-    // グルーピングキー：現場別 or 全件（"_all"に集約）
     const gid=(id)=> groupBySite ? id : "_all";
     const siteOrder=[]; const seen=new Set();
-    const spanBySite={};        // gid -> spans[]
-    const singleByCell={};      // "gid__dayIndex" -> [{kind,e,i,k}]
+    const spanBySite={};
+    const singleByCell={};
     const noteFirst=(g)=>{ if(!seen.has(g)){ seen.add(g); siteOrder.push(g); } };
 
     spans.forEach(e=>{ let fc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){fc=c;break;}} if(fc<0)return; const g=gid(e.site.id); (spanBySite[g]=spanBySite[g]||[]).push(e); noteFirst(g); });
@@ -1175,22 +1182,58 @@ function renderCalendarLanes(spans, days, groupBySite){
       extraChipsOnDay(k).forEach((e,i)=>{ const g=gid(e.site.id); noteFirst(g); const kk=g+"__"+c; (singleByCell[kk]=singleByCell[kk]||[]).push({kind:"xchip",e,i,k}); });
     }
 
-    // レーン高さ(px)＝その週で「同一グループ・同一日」に積まれるチップ高さ合計の最大
-    const laneH={}, laneBasePx={}; let cursorPx=0;
-    siteOrder.forEach(g=>{
-      let maxDay=LH+VPAD; // 最低1行
-      for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
-        let hsum=0, cnt=0;
-        (spanBySite[g]||[]).forEach(e=>{ if(k>=e.start&&k<=e.end){ hsum+=itemH(labelText(e)); cnt++; } });
-        const arr=singleByCell[g+"__"+c]; if(arr) arr.forEach(it=>{ hsum+=itemH(it.kind==="chip"?labelText(it.e):extraChipLabel(it.e)); cnt++; });
-        if(cnt>0){ hsum+=(cnt-1)*GAP; if(hsum>maxDay) maxDay=hsum; }
-      }
-      laneH[g]=maxDay; laneBasePx[g]=cursorPx; cursorPx+=maxDay+GAP;
-    });
+    // 祝日/ZERO休みラベルの行数に応じて、チップ開始位置を下げる（ラベルを隠さない）
+    let maxLab=0; week.forEach(dt=>{ if(!dt)return; const k=keyOf(dt); const n=(holidayName(k)?1:0)+((showZeroHolidays()&&zeroHolidays.has(k))?1:0); if(n>maxLab)maxLab=n; });
+    const topPad=26+maxLab*11;
+
+    const H=(hk,txt)=> (hmap&&hmap[hk]) ? hmap[hk] : (estLines(txt)*LH+VPAD+2);
+    // 配置：先頭から空きを探して詰める（first-fit）。帯は掛かる全日で同じ高さ。
+    const occ={}; const laneExt={}; const placed=[];
+    const place=(id,cols,h)=>{
+      const cand=[0]; cols.forEach(c=>(occ[id+"__"+c]||[]).forEach(r=>cand.push(r.b+GAP)));
+      cand.sort((x,y)=>x-y);
+      const top=cand.find(t=>cols.every(c=>(occ[id+"__"+c]||[]).every(r=>t>=r.b+GAP||t+h+GAP<=r.t)));
+      cols.forEach(c=>{ (occ[id+"__"+c]=occ[id+"__"+c]||[]).push({t:top,b:top+h}); });
+      laneExt[id]=Math.max(laneExt[id]||0, top+h);
+      return top;
+    };
+    siteOrder.forEach(id=>{ (spanBySite[id]||[]).forEach(e=>{
+      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}} if(fc<0)return;
+      const hk=`s${e.site.id}_${e.work}_${wi}`; const h=H(hk,labelText(e));
+      const cols=[]; for(let c=fc;c<=lc;c++)cols.push(c);
+      const sub=place(id,cols,h);
+      placed.push({id,sub,gen:(top)=>{
+        const left=fc*colW, width=(lc-fc+1)*colW;
+        const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
+        const c=effColor(e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
+        const radius=`${startsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${startsHere?'6px':'2px'}`;
+        return `<div class="span" data-hk="${hk}" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; font-size:10px; line-height:${LH}px; padding:1px 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:normal; word-break:break-word; overflow:hidden; font-weight:500;">${labelText(e)}</div>`;
+      }});
+    }); });
+    for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
+      siteOrder.forEach(id=>{ const arr=singleByCell[id+"__"+c]; if(!arr)return;
+        arr.forEach(item=>{
+          const label = item.kind==="chip"?labelText(item.e):extraChipLabel(item.e);
+          const hk=(item.kind==="chip"?"c":"x")+k+"_"+item.i; const h=H(hk,label);
+          const sub=place(id,[c],h);
+          placed.push({id,sub,gen:(top)=>{
+            const left=c*colW;
+            if(item.kind==="chip"){ const e=item.e; const c2=effColor(e.work,e.site,e.color);
+              return `<div class="chip" data-hk="${hk}" data-chipkey="${k}__${item.i}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; font-size:10px; line-height:${LH}px; padding:1px 5px; border-radius:5px; background:${e.done?c2.done:c2.bg}; color:${c2.fg}; white-space:normal; word-break:break-word; overflow:hidden;">${labelText(e)}</div>`;
+            } else { const e=item.e;
+              return `<div class="xchip" data-hk="${hk}" data-xchipkey="${k}__${item.i}" title="${extraChipLabel(e)}（実施）" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; font-size:10px; line-height:${LH}px; padding:1px 5px; border-radius:5px; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; white-space:normal; word-break:break-word; overflow:hidden;">${extraChipLabel(e)}</div>`;
+            }
+          }});
+        });
+      });
+    }
+
+    // レーン高さ＝実際に配置された最下端
+    const laneBasePx={}; let cursorPx=0;
+    siteOrder.forEach(g=>{ const lh=Math.max(laneExt[g]||0, MINH); laneBasePx[g]=cursorPx; cursorPx+=lh+GAP; });
     const areaH=cursorPx;
     const cellMinH=(calView==="week"?120:74);
 
-    // セル本体
     let cellsHtml=`<div style="display:grid; ${GTC} gap:4px; position:relative;">`;
     week.forEach(dt=>{
       if(!dt){ cellsHtml+=`<div></div>`; return; }
@@ -1201,44 +1244,14 @@ function renderCalendarLanes(spans, days, groupBySite){
       const holLabel = (hol?`<div title="${hol}" style="font-size:9px; color:var(--text-danger); line-height:1.1; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${hol}</div>`:'')
         +(isZeroHol?`<div title="ZERO休み" style="font-size:9px; color:#6b7280; font-weight:600; line-height:1.1; margin-top:1px;">ZERO休み</div>`:'');
       const dnumTxt = `${dt.getMonth()+1}/${dt.getDate()}`;
-      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${cellMinH}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
+      cellsHtml+=`<div class="daycell" data-day="${k}" style="min-height:${Math.max(cellMinH, topPad+areaH+6)}px; border:${isToday?'1.5px solid var(--border-accent)':'0.5px solid var(--border)'}; border-radius:8px; padding:4px; background:${cellBg};">
         <div style="font-size:12px; display:flex; align-items:center; gap:4px; color:${dnumColor}; font-weight:${isToday?'700':'400'};">${dnumTxt}${isToday?'<span style="font-size:9px; padding:0 4px; border-radius:4px; background:var(--bg-accent); color:var(--text-accent);">今日</span>':''}</div>${holLabel}
         <div style="height:${areaH}px;"></div></div>`;
     });
     cellsHtml+=`</div>`;
 
-    // オーバーレイ：現場レーンの上端から、その日のアイテムを高さぶん積む（可変高）
     let overlay=`<div style="position:absolute; inset:0; pointer-events:none;">`;
-    const offPx={}; // "gid__c" -> その日の現在の縦オフセット(px)
-    const takeOff=(id,c,h)=>{ const kk=id+"__"+c; const v=offPx[kk]||0; offPx[kk]=v+h+GAP; return v; };
-    // 帯（開始日で高さを確保し、掛かる各日を同じtopに置き、各日のオフセットを進める）
-    siteOrder.forEach(id=>{ (spanBySite[id]||[]).forEach(e=>{
-      let fc=-1,lc=-1; for(let c=0;c<7;c++){const k=weekKeys[c]; if(k&&k>=e.start&&k<=e.end){if(fc<0)fc=c; lc=c;}} if(fc<0)return;
-      const h=itemH(labelText(e));
-      const sub=takeOff(id,fc,h);
-      for(let c=fc+1;c<=lc;c++){ const kk=id+"__"+c; if((offPx[kk]||0)<=sub) offPx[kk]=sub+h+GAP; }
-      const left=fc*colW, width=(lc-fc+1)*colW, top=topPad+laneBasePx[id]+sub;
-      const startsHere=weekKeys[fc]===e.start, endsHere=weekKeys[lc]===e.end;
-      const c=effColor(e.work,e.site,e.color), bg=e.done?c.done:c.bg, fg=c.fg;
-      const radius=`${startsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${endsHere?'6px':'2px'} ${startsHere?'6px':'2px'}`;
-      overlay+=`<div class="span" data-spankey="${e.site.id}__${e.work}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${width}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:${radius}; background:${bg}; color:${fg}; white-space:normal; word-break:break-word; overflow:hidden; font-weight:500;">${labelText(e)}</div>`;
-    }); });
-    // 単日・追加（帯の下から順に）
-    for(let c=0;c<7;c++){ const k=weekKeys[c]; if(!k)continue;
-      siteOrder.forEach(id=>{ const arr=singleByCell[id+"__"+c]; if(!arr)return;
-        arr.forEach(item=>{
-          const label = item.kind==="chip"?labelText(item.e):extraChipLabel(item.e);
-          const h=itemH(label);
-          const sub=takeOff(id,c,h);
-          const top=topPad+laneBasePx[id]+sub, left=c*colW;
-          if(item.kind==="chip"){ const e=item.e; const c2=effColor(e.work,e.site,e.color);
-            overlay+=`<div class="chip" data-chipkey="${k}__${item.i}" title="${labelText(e)}" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:5px; background:${e.done?c2.done:c2.bg}; color:${c2.fg}; white-space:normal; word-break:break-word; overflow:hidden;">${labelText(e)}</div>`;
-          } else { const e=item.e;
-            overlay+=`<div class="xchip" data-xchipkey="${k}__${item.i}" title="${extraChipLabel(e)}（実施）" style="pointer-events:auto; cursor:grab; touch-action:none; position:absolute; left:calc(${left}% + 4px); width:calc(${colW}% - 8px); top:${top}px; min-height:${h-VPAD}px; font-size:10px; line-height:${LH}px; padding:2px 5px; border-radius:5px; background:${e.color.done}; color:#fff; border:1px solid ${e.color.fg}; white-space:normal; word-break:break-word; overflow:hidden;">${extraChipLabel(e)}</div>`;
-          }
-        });
-      });
-    }
+    placed.forEach(pl=>{ overlay+=pl.gen(topPad+laneBasePx[pl.id]+pl.sub); });
     overlay+=`</div>`;
     weeksHtml+=`<div style="position:relative; margin-bottom:4px;">${cellsHtml}${overlay}</div>`;
   });
