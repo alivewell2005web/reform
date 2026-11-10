@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v87</title>
+<title>リフォーム進捗管理アプリ v89</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -410,8 +410,9 @@ function cellHtml(s,i){
   const plan=fmt(s.plan[i]),act=fmt(s.act[i]),filled=!!act;
   // ⑤(i=3) 工事手配・工程管理：⑤内訳の最終工事日を自動反映（日付のみ表示、編集不可）
   if(i===3){
-    return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border);">
-      <div title="工事の最終日を自動反映" style="font-size:13px;">${plan?`<span style="color:var(--text-secondary);">${plan}</span>`:'<span style="color:var(--text-muted);">自動</span>'}<i class="ti ti-refresh" aria-hidden="true" style="font-size:10px; vertical-align:0; margin-left:2px; color:var(--text-muted);"></i></div></td>`;
+    const allPlaced = allWorksPlaced(s); // 設定した工事がすべてカレンダーに配置済み → 他の完了セルと同じ緑
+    return `<td style="padding:5px 4px; text-align:center; border-left:0.5px solid var(--border); ${allPlaced?'background:var(--bg-success);':''}">
+      <div title="${allPlaced?'設定した工事はすべてカレンダーに配置済み（最終日を自動反映）':'工事の最終日を自動反映'}" style="font-size:13px;">${plan?`<span style="color:${allPlaced?'var(--text-success)':'var(--text-secondary)'}; ${allPlaced?'font-weight:500;':''}">${plan}</span>`:'<span style="color:var(--text-muted);">未設定</span>'}<i class="ti ti-refresh" aria-hidden="true" style="font-size:10px; vertical-align:0; margin-left:2px; color:var(--text-muted);"></i></div></td>`;
   }
   // ②(i=0) 退去立会：日付＋時刻(hh:mm、幅可)＋立会者。日付未入力は「未定」
   if(i===0){
@@ -1559,6 +1560,16 @@ function latestWorkDate(s){
   });
   if(!ds.length) return null;
   ds.sort(); return ds[ds.length-1];
+}
+// 工事が1件以上設定されており、そのすべてに日付が入っている（＝未手配が無くカレンダー配置済み）か
+function allWorksPlaced(s){
+  let total=0, placed=0;
+  Object.keys(s.works||{}).forEach(w=>{ const def=WORKDEF[w]; const wk=s.works[w]; if(!def||!wk) return;
+    if(def.type==="span"){ total++; if(wk.start&&wk.end) placed++; }
+    else if(def.type==="single"){ total++; if(wk.plan) placed++; }
+    else if(def.type==="multi"){ (wk.items||[]).forEach(it=>{ total++; if(it&&it.plan) placed++; }); }
+  });
+  return total>0 && total===placed;
 }
 // ⑤予定(plan[3])を最終工事日に自動同期
 function syncPhase5(s){ const d=latestWorkDate(s); if(d) s.plan[3]=d; }
