@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="工事進捗">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f7f5">
-<title>リフォーム進捗管理アプリ v83</title>
+<title>リフォーム進捗管理アプリ v84</title>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
@@ -869,6 +869,28 @@ function dayKeyAtPoint(x,y){
   return null;
 }
 
+// ZERO休みの日にZEROの工事（清掃など）を置けないようにする判定
+function payloadVendor(payload){
+  try{
+    if(payload.type==="span"){ const s=sites.find(x=>x.id===payload.id); return s.works[payload.w].vendor||null; }
+    if(payload.type==="chip"){ const r=payload.ref; const s=sites.find(x=>x.id===r.id); const wk=s.works[r.w]; return r.kind==="single" ? (wk.vendor||null) : ((wk.items[r.ix]||{}).vendor||null); }
+    if(payload.type==="new"){ const s=sites.find(x=>x.id===payload.id); const wk=s.works[payload.w]; const t=WORKDEF[payload.w].type;
+      if(t==="multi") return (payload.ix!=null&&wk.items&&wk.items[payload.ix]) ? (wk.items[payload.ix].vendor||null) : null;
+      return wk.vendor||null; }
+  }catch(_){}
+  return null;
+}
+function dropBlockedByZeroHoliday(payload,key){
+  if(!key || !zeroHolidays || !zeroHolidays.size) return false;
+  if(payloadVendor(payload)!=="ZERO") return false;
+  if(payload.type==="span"){ // 期間（帯）は掛かる全日をチェック
+    const s=sites.find(x=>x.id===payload.id); const wk=s.works[payload.w]; const len=dateDiff(wk.start,wk.end)||0;
+    for(let i=0;i<=len;i++){ if(zeroHolidays.has(dateAdd(key,i))) return true; }
+    return false;
+  }
+  return zeroHolidays.has(key);
+}
+
 let DND=null;
 function isPhone(){
   // タッチ主体の端末（スマホ/タブレット）はカレンダー内ドラッグ無効・タップのみ。
@@ -905,7 +927,7 @@ function startDrag(el, e, payload){
     DND.ghost.style.left=(ev.clientX+8)+"px"; DND.ghost.style.top=(ev.clientY+8)+"px";
     document.querySelectorAll(".daycell").forEach(c=>c.style.outline="none");
     const key=dayKeyAtPoint(ev.clientX,ev.clientY);
-    if(key){ const cell=document.querySelector(`.daycell[data-day="${key}"]`); if(cell){cell.style.outline="2px solid var(--border-accent)"; cell.style.outlineOffset="-2px";} }
+    if(key){ const cell=document.querySelector(`.daycell[data-day="${key}"]`); if(cell){ const blk=dropBlockedByZeroHoliday(payload,key); cell.style.outline=blk?"2px solid var(--text-danger)":"2px solid var(--border-accent)"; cell.style.outlineOffset="-2px"; DND.ghost.style.opacity=blk?".45":".9";} }
     const uz=document.getElementById("unassigned");
     if(uz){ uz.style.outline = overUnassigned(ev.clientX,ev.clientY) ? "2px dashed var(--text-danger)" : "none"; }
   };
@@ -914,12 +936,21 @@ function startDrag(el, e, payload){
     try{ if(DND.pid!=null && el.releasePointerCapture) el.releasePointerCapture(DND.pid); }catch(_){}
     document.querySelectorAll(".daycell").forEach(c=>c.style.outline="none");
     const uz=document.getElementById("unassigned"); if(uz) uz.style.outline="none";
-    if(DND.ghost) DND.ghost.remove();
+    let ghost=DND.ghost;
     if(DND.moved){
       if(overUnassigned(ev.clientX,ev.clientY)){ unassignPayload(payload); }
-      else { const key=dayKeyAtPoint(ev.clientX,ev.clientY); if(key) applyDrop(payload,key); }
+      else { const key=dayKeyAtPoint(ev.clientX,ev.clientY);
+        if(key && dropBlockedByZeroHoliday(payload,key)){
+          // ZERO休みの日には置けない：元の位置へ「ひゅん」と戻す
+          if(ghost){ const r=el.getBoundingClientRect(); const g=ghost; ghost=null;
+            g.style.transition="left .28s cubic-bezier(.2,.9,.3,1), top .28s cubic-bezier(.2,.9,.3,1), opacity .28s ease";
+            g.style.left=r.left+"px"; g.style.top=r.top+"px"; g.style.opacity=".15";
+            setTimeout(()=>g.remove(),300); }
+        }
+        else if(key) applyDrop(payload,key); }
     }
     else if(payload.onClick){ payload.onClick(); }
+    if(ghost) ghost.remove();
     DND=null;
   };
   el.addEventListener("pointermove",move);
